@@ -1,12 +1,12 @@
 use crate::types::storage;
 use bity_ic_canister_state_macros::canister_state;
+use bity_ic_storage_canister_api::{cancel_upload, finalize_upload, init_upload, store_chunk};
 use bity_ic_types::BuildVersion;
 use bity_ic_types::{Cycles, TimestampMillis};
 use bity_ic_utils::env::{CanisterEnv, Environment};
 use bity_ic_utils::memory::MemorySize;
 use candid::{CandidType, Nat, Principal};
 use serde::{Deserialize, Serialize};
-use storage_api_canister::{cancel_upload, finalize_upload, init_upload, store_chunk};
 
 canister_state!(RuntimeState);
 

@@ -34,7 +34,7 @@ ic0 = { workspace = true }
 ic-asset-certification = { workspace = true}
 ic-http-certification = { workspace = true}
 
-storage_api_canister = { path = "../api", features = []}
+bity-ic-storage-canister-api = { path = "../api", features = []}
 
 bity-ic-canister-client = { workspace = true }
 bity-ic-canister-logger = { workspace = true }

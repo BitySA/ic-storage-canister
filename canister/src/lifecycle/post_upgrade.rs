@@ -4,11 +4,11 @@ use crate::{lifecycle::init_canister, utils::trace};
 use bity_ic_canister_logger::LogEntry;
 use bity_ic_canister_tracing_macros::trace;
 use bity_ic_stable_memory::get_reader;
+use bity_ic_storage_canister_api::Args;
 use bity_ic_types::BuildVersion;
 use candid::CandidType;
 use ic_cdk_macros::post_upgrade;
 use serde::{Deserialize, Serialize};
-use storage_api_canister::Args;
 use tracing::info;
 
 #[derive(CandidType, Serialize, Deserialize, Debug)]

@@ -1,8 +1,6 @@
+use bity_ic_storage_canister_api::types::storage::UploadState;
+use bity_ic_storage_canister_api::{cancel_upload, finalize_upload, init_upload, store_chunk};
 use ic_asset_certification::Asset;
-use storage_api_canister::cancel_upload;
-use storage_api_canister::finalize_upload;
-use storage_api_canister::init_upload;
-use storage_api_canister::store_chunk;
 // use icrc_ledger_types::icrc::generic_value::ICRC3Value as Value;
 use super::http::{certify_asset, uncertify_asset};
 use crate::memory::get_data_storage_memory;
@@ -16,7 +14,6 @@ use ic_stable_structures::StableBTreeMap;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use storage_api_canister::types::storage::UploadState;
 
 const DEFAULT_CHUNK_SIZE: u64 = 1 * 1024 * 1024;
 

@@ -1,10 +1,10 @@
 use crate::guards::caller_is_governance_principal;
 use crate::state::mutate_state;
+pub use bity_ic_storage_canister_api::cancel_upload;
+pub use bity_ic_storage_canister_api::finalize_upload;
+pub use bity_ic_storage_canister_api::init_upload;
+pub use bity_ic_storage_canister_api::store_chunk;
 use ic_cdk::{api::call::RejectionCode, update};
-pub use storage_api_canister::cancel_upload;
-pub use storage_api_canister::finalize_upload;
-pub use storage_api_canister::init_upload;
-pub use storage_api_canister::store_chunk;
 
 #[update(guard = "caller_is_governance_principal")]
 pub fn init_upload(data: init_upload::Args) -> init_upload::Response {

@@ -1,5 +1,9 @@
 use crate::client::storage::{finalize_upload, init_upload, store_chunk};
+use bity_ic_storage_canister_api::finalize_upload;
+use bity_ic_storage_canister_api::init_upload;
+use bity_ic_storage_canister_api::store_chunk;
 use bity_ic_types::Cycles;
+
 use bytes::Bytes;
 use candid::{Nat, Principal};
 use http::Request;
@@ -13,9 +17,6 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::str::FromStr;
-use storage_api_canister::finalize_upload;
-use storage_api_canister::init_upload;
-use storage_api_canister::store_chunk;
 use url::Url;
 
 pub fn random_principal() -> Principal {

@@ -1,8 +1,8 @@
 use crate::wasms::STORAGE_WASM;
+use bity_ic_storage_canister_api::lifecycle::Args;
 use candid::encode_one;
 use candid::Principal;
 use pocket_ic::PocketIc;
-use storage_api_canister::lifecycle::Args;
 
 pub fn setup_storage_canister(
     pic: &mut PocketIc,

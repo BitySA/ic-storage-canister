@@ -1,13 +1,13 @@
 use crate::client::storage::{cancel_upload, finalize_upload, init_upload, store_chunk};
 use candid::Nat;
 
+use bity_ic_storage_canister_api::cancel_upload;
+use bity_ic_storage_canister_api::finalize_upload;
+use bity_ic_storage_canister_api::init_upload;
+use bity_ic_storage_canister_api::store_chunk;
 use http::StatusCode;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value as Icrc3Value;
 use sha2::{Digest, Sha256};
-use storage_api_canister::cancel_upload;
-use storage_api_canister::finalize_upload;
-use storage_api_canister::init_upload;
-use storage_api_canister::store_chunk;
 
 use crate::storage_suite::setup::setup::TestEnv;
 use crate::utils::{setup_http_client, upload_file};

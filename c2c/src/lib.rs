@@ -1,11 +1,11 @@
 use bity_ic_canister_client::generate_candid_c2c_call;
-use storage_api_canister::cancel_upload;
-use storage_api_canister::finalize_upload;
-use storage_api_canister::get_storage_size::{
+use bity_ic_storage_canister_api::cancel_upload;
+use bity_ic_storage_canister_api::finalize_upload;
+use bity_ic_storage_canister_api::get_storage_size::{
     Args as GetStorageSizeArgs, Response as GetStorageSizeResponse,
 };
-use storage_api_canister::init_upload;
-use storage_api_canister::store_chunk;
+use bity_ic_storage_canister_api::init_upload;
+use bity_ic_storage_canister_api::store_chunk;
 
 pub mod get_storage_size {
     use super::*;

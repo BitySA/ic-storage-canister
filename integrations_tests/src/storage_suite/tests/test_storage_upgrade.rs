@@ -1,14 +1,14 @@
 use crate::client::storage::{finalize_upload, init_upload, store_chunk};
 use crate::storage_suite::setup::setup_storage::upgrade_storage_canister;
+use bity_ic_storage_canister_api::lifecycle::Args;
+use bity_ic_storage_canister_api::post_upgrade::UpgradeArgs;
 use bity_ic_types::BuildVersion;
 use candid::Nat;
-use storage_api_canister::lifecycle::Args;
-use storage_api_canister::post_upgrade::UpgradeArgs;
 
+use bity_ic_storage_canister_api::finalize_upload;
+use bity_ic_storage_canister_api::init_upload;
+use bity_ic_storage_canister_api::store_chunk;
 use sha2::{Digest, Sha256};
-use storage_api_canister::finalize_upload;
-use storage_api_canister::init_upload;
-use storage_api_canister::store_chunk;
 
 use crate::storage_suite::setup::setup::TestEnv;
 use crate::{storage_suite::setup::default_test_setup, utils::tick_n_blocks};

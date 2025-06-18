@@ -23,7 +23,7 @@ sha2 = "0.10.8"
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 tempfile = "3.0"
-storage_api_canister = { path = "../api", features = []}
+bity-ic-storage-canister-api = { path = "../api", features = []}
 ic-cdk = { workspace = true }
 reqwest = "0.12.12"
 tokio = { version = "1.43.0", features = ["full"] }

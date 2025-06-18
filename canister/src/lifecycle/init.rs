@@ -1,9 +1,9 @@
 use crate::lifecycle::init_canister;
 use crate::state::{Data, RuntimeState};
 use bity_ic_canister_tracing_macros::trace;
+use bity_ic_storage_canister_api::lifecycle::Args;
 use bity_ic_utils::env::{CanisterEnv, Environment};
 use ic_cdk_macros::init;
-use storage_api_canister::lifecycle::Args;
 use tracing::info;
 
 #[init]

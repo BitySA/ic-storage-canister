@@ -1,6 +1,8 @@
 use crate::state::read_state;
+
+pub use bity_ic_storage_canister_api::queries::get_storage_size::{Args, Response};
+
 use ic_cdk::query;
-pub use storage_api_canister::queries::get_storage_size::{Args, Response};
 
 #[query]
 async fn get_storage_size(_: Args) -> Response {

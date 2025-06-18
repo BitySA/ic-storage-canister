@@ -1,12 +1,12 @@
 use crate::storage_suite::setup::setup_storage::setup_storage_canister;
 use crate::utils::random_principal;
+use bity_ic_storage_canister_api::init::InitArgs;
+use bity_ic_storage_canister_api::lifecycle::Args;
 use bity_ic_types::{BuildVersion, CanisterId, Milliseconds};
 use candid::CandidType;
 use candid::Deserialize;
 use candid::Principal;
 use pocket_ic::{PocketIc, PocketIcBuilder};
-use storage_api_canister::init::InitArgs;
-use storage_api_canister::lifecycle::Args;
 
 use std::time::Duration;
 
