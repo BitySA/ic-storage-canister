@@ -1,0 +1,24 @@
+---
+# Publish crates to crates.io
+# Only triggered on tags
+name: publish crates
+on:
+  push:
+    tags:
+      - 'bity-ic-storage-canister-*'
+jobs:
+  publish:
+    name: Publish crates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+      - name: Publish crates to crates.io
+        run: |
+          CRATE=${GITHUB_REF_NAME##bity-ic-storage-canister-}
+          CRATE=${CRATE%%-*}
+          [[ -d src/${CRATE} ]] || exit 1
+          pushd src/${CRATE}
+          cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_API_TOKEN }}
