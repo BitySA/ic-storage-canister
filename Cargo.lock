@@ -1466,6 +1466,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-storage-canister-c2c"
+version = "0.1.0"
+dependencies = [
+ "bity-ic-canister-client",
+ "bity-ic-types",
+ "candid",
+ "ic-cdk",
+ "storage_api_canister",
+ "storage_canister",
+]
+
+[[package]]
 name = "ic-transport-types"
 version = "0.40.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3086,18 +3098,6 @@ dependencies = [
  "sha2 0.10.9",
  "storage_api_canister",
  "tracing",
-]
-
-[[package]]
-name = "storage_canister_c2c_client"
-version = "0.1.0"
-dependencies = [
- "bity-ic-canister-client",
- "bity-ic-types",
- "candid",
- "ic-cdk",
- "storage_api_canister",
- "storage_canister",
 ]
 
 [[package]]

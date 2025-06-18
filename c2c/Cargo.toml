@@ -1,5 +1,5 @@
 [package]
-name = "storage_canister_c2c_client"
+name = "bity-ic-storage-canister-c2c"
 version = "0.1.0"
 edition = "2021"
 

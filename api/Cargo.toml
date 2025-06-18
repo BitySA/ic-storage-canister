@@ -1,5 +1,5 @@
 [package]
-name = "storage_api_canister"
+name = "bity-ic-storage-canister-api"
 version = "0.1.0"
 edition = "2021"
 

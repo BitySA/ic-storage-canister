@@ -1,5 +1,6 @@
 #!/bin/bash
 
+mkdir -p ./wasm
 cargo rustc --crate-type=cdylib --target wasm32-unknown-unknown --target-dir "canister/src/target" --release --locked -p storage_canister &&
 ic-wasm "canister/src/target/wasm32-unknown-unknown/release/storage_canister.wasm" -o "canister/src/target/wasm32-unknown-unknown/release/storage_canister.wasm" shrink &&
 ic-wasm "canister/src/target/wasm32-unknown-unknown/release/storage_canister.wasm" -o "canister/src/target/wasm32-unknown-unknown/release/storage_canister.wasm" optimize --inline-functions-with-loops O3 &&
