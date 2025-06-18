@@ -307,15 +307,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "bity-ic-storage-canister-api"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fa967876de235f6a69b708bb8c5153b5c0a27095b2aae62e608b517899cd658"
+dependencies = [
+ "async-trait",
+ "bity-ic-canister-logger",
+ "bity-ic-canister-state-macros",
+ "bity-ic-canister-time",
+ "bity-ic-canister-tracing-macros",
+ "bity-ic-serializer",
+ "bity-ic-stable-memory",
+ "bity-ic-types",
+ "bity-ic-utils",
+ "candid",
+ "enum_dispatch",
+ "futures",
+ "hex",
+ "ic-cdk",
+ "ic-cdk-macros",
+ "ic-cdk-timers",
+ "ic-http-certification",
+ "ic-ledger-types",
+ "ic-stable-structures",
+ "icrc-ledger-types 0.1.8",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "sha2 0.10.9",
+ "tracing",
+]
+
+[[package]]
 name = "bity-ic-storage-canister-c2c"
 version = "0.1.0"
 dependencies = [
  "bity-ic-canister-client",
- "bity-ic-storage-canister-api",
+ "bity-ic-storage-canister-api 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bity-ic-types",
  "candid",
  "ic-cdk",
- "storage_canister",
 ]
 
 [[package]]
@@ -1795,7 +1827,7 @@ name = "integration_tests"
 version = "0.1.0"
 dependencies = [
  "bity-ic-canister-time",
- "bity-ic-storage-canister-api",
+ "bity-ic-storage-canister-api 0.1.0",
  "bity-ic-types",
  "bity-ic-utils",
  "bytes",
@@ -3077,7 +3109,7 @@ dependencies = [
  "bity-ic-canister-tracing-macros",
  "bity-ic-serializer",
  "bity-ic-stable-memory",
- "bity-ic-storage-canister-api",
+ "bity-ic-storage-canister-api 0.1.0",
  "bity-ic-types",
  "bity-ic-utils",
  "candid",
