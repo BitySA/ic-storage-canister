@@ -17,8 +17,8 @@ jobs:
         run: |
           CRATE=${GITHUB_REF_NAME##bity-ic-storage-canister-}
           CRATE=${CRATE%%-*}
-          [[ -d src/${CRATE} ]] || exit 1
-          pushd src/${CRATE}
+          [[ -d ${CRATE} ]] || exit 1
+          pushd ${CRATE}
           cargo publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_API_TOKEN }}
