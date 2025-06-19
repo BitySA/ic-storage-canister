@@ -203,9 +203,9 @@ checksum = "1b8e56985ec62d17e9c1001dc89c88ecd7dc08e47eba5ec7c29c7b5eeecde967"
 
 [[package]]
 name = "bity-ic-canister-client"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ee034b78c9fa7a1170d5d6e8f64eee89961509d93ca65af0eafd9d1ee620d8f"
+checksum = "b2c6fe1d03f8c33e0bd22304a53810d63f1f811de171e738fe1cee68f6c86333"
 dependencies = [
  "bity-ic-types",
  "candid",
@@ -341,9 +341,8 @@ dependencies = [
 
 [[package]]
 name = "bity-ic-storage-canister-c2c"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
- "bity-ic-canister-client",
  "bity-ic-storage-canister-api 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bity-ic-types",
  "candid",
