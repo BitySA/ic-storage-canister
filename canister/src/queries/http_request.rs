@@ -30,7 +30,8 @@ async fn http_request(req: HttpRequest<'static>) -> HttpResponse<'static> {
                 Some(response) => response,
                 None => {
                     if req.headers().to_vec().iter().any(|(k, v)| {
-                        k == "referer" && v.contains(ic_cdk::api::id().to_string().as_str())
+                        k == "referer"
+                            && v.contains(ic_cdk::api::canister_self().to_string().as_str())
                     }) {
                         return HttpResponse::builder()
                             .with_status_code(StatusCode::NOT_FOUND)
@@ -57,7 +58,7 @@ async fn http_request_update(req: HttpUpdateRequest<'static>) -> HttpUpdateRespo
                 Ok(_) => {
                     let redirection_url = format!(
                         "https://{}.raw.icp0.io{}",
-                        ic_cdk::api::id().to_string(),
+                        ic_cdk::api::canister_self().to_string(),
                         path.clone()
                     );
 

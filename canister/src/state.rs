@@ -62,28 +62,28 @@ impl Data {
     pub fn init_upload(
         &mut self,
         data: init_upload::Args,
-    ) -> Result<init_upload::InitUploadResp, String> {
+    ) -> Result<init_upload::InitUploadResp, init_upload::InitUploadError> {
         self.storage.init_upload(data)
     }
 
     pub fn store_chunk(
         &mut self,
         data: store_chunk::Args,
-    ) -> Result<store_chunk::StoreChunkResp, String> {
+    ) -> Result<store_chunk::StoreChunkResp, store_chunk::StoreChunkError> {
         self.storage.store_chunk(data)
     }
 
     pub fn finalize_upload(
         &mut self,
         data: finalize_upload::Args,
-    ) -> Result<finalize_upload::FinalizeUploadResp, String> {
+    ) -> Result<finalize_upload::FinalizeUploadResp, finalize_upload::FinalizeUploadError> {
         self.storage.finalize_upload(data)
     }
 
     pub fn cancel_upload(
         &mut self,
         media_hash_id: String,
-    ) -> Result<cancel_upload::CancelUploadResp, String> {
+    ) -> Result<cancel_upload::CancelUploadResp, cancel_upload::CancelUploadError> {
         self.storage.cancel_upload(media_hash_id)
     }
 }

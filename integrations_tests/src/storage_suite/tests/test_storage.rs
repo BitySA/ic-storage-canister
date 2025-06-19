@@ -705,12 +705,8 @@ fn test_storage_scalability() {
     match result {
         Ok(_) => panic!("Expected third upload to fail due to storage limit"),
         Err(e) => {
-            assert!(
-                e.contains("Not enough storage"),
-                "Expected 'Not enough storage' error, got: {}",
-                e
-            );
-            println!("Third upload failed as expected with: {}", e);
+            assert_eq!(e, format!("init_upload error: {:?}", bity_ic_storage_canister_api::updates::init_upload::InitUploadError::NotEnoughStorage));
+            println!("Third upload failed as expected with: {:?}", e);
         }
     }
 

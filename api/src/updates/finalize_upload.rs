@@ -1,5 +1,4 @@
 use candid::CandidType;
-use ic_cdk::api::call::CallResult as Result;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug)]
@@ -12,4 +11,13 @@ pub struct FinalizeUploadResp {
     pub url: String,
 }
 
-pub type Response = Result<FinalizeUploadResp>;
+pub type Response = Result<FinalizeUploadResp, FinalizeUploadError>;
+
+#[derive(Serialize, Deserialize, CandidType, Debug)]
+pub enum FinalizeUploadError {
+    UploadNotStarted,
+    UploadAlreadyFinalized,
+    IncompleteUpload,
+    FileSizeMismatch,
+    FileHashMismatch,
+}

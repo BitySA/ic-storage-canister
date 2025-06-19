@@ -1,5 +1,4 @@
 use candid::CandidType;
-use ic_cdk::api::call::CallResult as Result;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug)]
@@ -10,4 +9,9 @@ pub struct Args {
 #[derive(Serialize, Deserialize, CandidType, Debug)]
 pub struct CancelUploadResp {}
 
-pub type Response = Result<CancelUploadResp>;
+pub type Response = Result<CancelUploadResp, CancelUploadError>;
+
+#[derive(Serialize, Deserialize, CandidType, Debug)]
+pub enum CancelUploadError {
+    UploadNotInitialized,
+}

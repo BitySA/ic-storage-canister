@@ -1,5 +1,4 @@
 use candid::CandidType;
-use ic_cdk::api::call::CallResult as Result;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug)]
@@ -13,4 +12,11 @@ pub struct Args {
 #[derive(Serialize, Deserialize, CandidType, Debug)]
 pub struct InitUploadResp {}
 
-pub type Response = Result<InitUploadResp>;
+pub type Response = Result<InitUploadResp, InitUploadError>;
+
+#[derive(Serialize, Deserialize, CandidType, Debug)]
+pub enum InitUploadError {
+    FileAlreadyExists,
+    NotEnoughStorage,
+    InvalidChunkSize,
+}

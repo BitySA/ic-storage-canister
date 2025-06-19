@@ -75,7 +75,7 @@ impl StorageData {
     pub fn init_upload(
         &mut self,
         data: init_upload::Args,
-    ) -> Result<init_upload::InitUploadResp, String> {
+    ) -> Result<init_upload::InitUploadResp, init_upload::InitUploadError> {
         trace(&format!("init_upload - file_path: {:?}", data.file_path));
 
         let path = if data.file_path.starts_with('/') {
@@ -86,16 +86,16 @@ impl StorageData {
 
         // Check if the file already exists
         if self.storage_raw_internal_metadata.contains_key(&path) {
-            return Err("File already exists".to_string());
+            return Err(init_upload::InitUploadError::FileAlreadyExists);
         }
 
         if self.get_free_storage_size_bytes() < (data.file_size as u128) {
-            return Err("Not enough storage".to_string());
+            return Err(init_upload::InitUploadError::NotEnoughStorage);
         }
         let chunk_size = data.chunk_size.unwrap_or(DEFAULT_CHUNK_SIZE);
 
         if chunk_size > DEFAULT_CHUNK_SIZE || chunk_size < 1 {
-            return Err("Invalid chunk size, max size is 1Mb".to_string());
+            return Err(init_upload::InitUploadError::InvalidChunkSize);
         }
 
         let num_chunks = (data.file_size + chunk_size - 1) / chunk_size;
@@ -118,7 +118,7 @@ impl StorageData {
     pub fn store_chunk(
         &mut self,
         data: store_chunk::Args,
-    ) -> Result<store_chunk::StoreChunkResp, String> {
+    ) -> Result<store_chunk::StoreChunkResp, store_chunk::StoreChunkError> {
         trace(&format!("store_chunk - hash_id: {:?}", data.file_path));
 
         let path = if data.file_path.starts_with('/') {
@@ -130,7 +130,7 @@ impl StorageData {
         let metadata = self
             .storage_raw_internal_metadata
             .get_mut(&path.clone())
-            .ok_or("Upload not initialized".to_string())?;
+            .ok_or(store_chunk::StoreChunkError::UploadNotInitialized)?;
 
         match metadata.state {
             UploadState::Init => {
@@ -138,7 +138,7 @@ impl StorageData {
             }
             UploadState::InProgress => (),
             UploadState::Finalized => {
-                return Err("Storage - store_chunk - Upload already finalized".to_string());
+                return Err(store_chunk::StoreChunkError::UploadAlreadyFinalized);
             }
         }
 
@@ -147,12 +147,12 @@ impl StorageData {
         let chunk_index = usize::try_from(data.chunk_id.0).unwrap();
 
         if received_size + (data.chunk_data.len() as u64) > file_size {
-            return Err("Chunk exceeds file size".to_string());
+            return Err(store_chunk::StoreChunkError::InvalidChunkData);
         }
 
         // Check if the chunk has already been stored
         if !metadata.chunks[chunk_index].is_empty() {
-            return Err("Chunk already stored".to_string());
+            return Err(store_chunk::StoreChunkError::InvalidChunkData);
         }
 
         metadata.chunks[chunk_index] = data.chunk_data.clone();
@@ -164,7 +164,7 @@ impl StorageData {
     pub fn finalize_upload(
         &mut self,
         data: finalize_upload::Args,
-    ) -> Result<finalize_upload::FinalizeUploadResp, String> {
+    ) -> Result<finalize_upload::FinalizeUploadResp, finalize_upload::FinalizeUploadError> {
         trace(&format!("finalize_upload - hash_id: {:?}", data.file_path));
 
         let path = if data.file_path.starts_with('/') {
@@ -176,17 +176,17 @@ impl StorageData {
         let mut metadata = self
             .storage_raw_internal_metadata
             .remove(&path.clone())
-            .ok_or("Storage - finalize_upload - Upload not initialized".to_string())?;
+            .ok_or(finalize_upload::FinalizeUploadError::UploadNotStarted)?;
 
         match metadata.state {
             UploadState::Init => {
                 self.storage_raw_internal_metadata
                     .insert(path.clone(), metadata);
-                return Err("Storage - finalize_upload - Upload not started".to_string());
+                return Err(finalize_upload::FinalizeUploadError::UploadNotStarted);
             }
             UploadState::InProgress => {}
             UploadState::Finalized => {
-                return Err("Storage - finalize_upload - Upload already finalized".to_string());
+                return Err(finalize_upload::FinalizeUploadError::UploadAlreadyFinalized);
             }
         }
 
@@ -194,10 +194,7 @@ impl StorageData {
         let received_size = metadata.received_size as u128;
 
         if received_size != file_size {
-            return Err(
-                "Storage - finalize_upload - Incomplete upload. Upload failed, try again."
-                    .to_string(),
-            );
+            return Err(finalize_upload::FinalizeUploadError::IncompleteUpload);
         }
 
         let mut file_data = Vec::with_capacity(file_size as usize);
@@ -206,10 +203,7 @@ impl StorageData {
         }
 
         if (file_data.len() as u64) != metadata.file_size {
-            return Err(
-                "Storage - finalize_upload - File size mismatch. Upload failed, try again."
-                    .to_string(),
-            );
+            return Err(finalize_upload::FinalizeUploadError::FileSizeMismatch);
         }
 
         let mut hasher = Sha256::new();
@@ -217,10 +211,7 @@ impl StorageData {
         let calculated_hash = hex::encode(hasher.finalize());
 
         if calculated_hash != metadata.file_hash {
-            return Err(
-                "Storage - finalize_upload - File hash mismatch. Upload failed, try again."
-                    .to_string(),
-            );
+            return Err(finalize_upload::FinalizeUploadError::FileHashMismatch);
         }
 
         metadata.chunks.clear();
@@ -260,7 +251,7 @@ impl StorageData {
     pub fn cancel_upload(
         &mut self,
         file_path: String,
-    ) -> Result<cancel_upload::CancelUploadResp, String> {
+    ) -> Result<cancel_upload::CancelUploadResp, cancel_upload::CancelUploadError> {
         let path = if file_path.starts_with('/') {
             file_path[1..].to_string()
         } else {
@@ -270,7 +261,7 @@ impl StorageData {
         let metadata = self
             .storage_raw_internal_metadata
             .remove(&path)
-            .ok_or("Upload not initialized".to_string())?;
+            .ok_or(cancel_upload::CancelUploadError::UploadNotInitialized)?;
 
         if metadata.state == UploadState::Finalized {
             trap("Cannot cancel a finalized upload");
@@ -369,8 +360,6 @@ impl StorageData {
 
     #[cfg(target_arch = "wasm32")]
     pub fn get_free_heap_size_bytes(&self, env: &CanisterEnv) -> u64 {
-        use crate::state::read_state;
-
         if env.is_test_mode() == true {
             let max_heap_size = 5 * 1024 * 1024 * 4; // 5mb * 4 for tests (testing with 4 files of 5mb and then query again to check heap free mecanism)
             let used_space: u64 = self

@@ -1,5 +1,4 @@
 use candid::{CandidType, Nat};
-use ic_cdk::api::call::CallResult as Result;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug)]
@@ -12,4 +11,16 @@ pub struct Args {
 #[derive(Serialize, Deserialize, CandidType, Debug)]
 pub struct StoreChunkResp {}
 
-pub type Response = Result<StoreChunkResp>;
+pub type Response = Result<StoreChunkResp, StoreChunkError>;
+
+#[derive(Serialize, Deserialize, CandidType, Debug)]
+pub enum StoreChunkError {
+    UploadNotInitialized,
+    UploadAlreadyFinalized,
+    InvalidChunkId,
+    InvalidChunkData,
+    InvalidFilePath,
+    InvalidFileSize,
+    InvalidFileHash,
+    InvalidFileFormat,
+}
