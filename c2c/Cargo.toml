@@ -1,6 +1,6 @@
 [package]
 name = "bity-ic-storage-canister-c2c"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Api for Canister to Canister calls for the storage canister"
 license = "MIT"
@@ -11,7 +11,7 @@ repository = "https://github.com/BitySA/ic-storage-canister"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bity-ic-storage-canister-api ="0.1.0"
+bity-ic-storage-canister-api ="0.2.0"
 bity-ic-canister-client = { workspace = true }
 ic-cdk = { workspace = true }
 candid = { workspace = true }
