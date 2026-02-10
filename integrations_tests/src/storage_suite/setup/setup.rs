@@ -79,13 +79,8 @@ impl TestEnvBuilder {
             .with_system_subnet()
             .build();
 
-        self.storage_canister_id = pic
-            .create_canister_with_id(
-                Some(self.controller.clone()),
-                None,
-                Principal::from_text("auamu-4x777-77775-aaaaa-cai").unwrap(),
-            )
-            .unwrap();
+        self.storage_canister_id =
+            pic.create_canister_with_settings(Some(self.controller.clone()), None);
 
         pic.tick();
         pic.advance_time(Duration::from_millis(MINUTE_IN_MS * 10));

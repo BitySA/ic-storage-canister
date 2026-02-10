@@ -171,6 +171,8 @@ fn test_storage_after_update_simple() {
         "https://{}.raw.icp0.io/test.png",
         storage_canister_id.to_text()
     );
+
+    println!("location: {:?}", location);
     let expected_headers = vec![("location", location.as_str())];
 
     println!("response_headers: {:?}", response_headers);
@@ -182,6 +184,8 @@ fn test_storage_after_update_simple() {
     if response.canister_response.status() == 307 {
         if let Some(location) = response.canister_response.headers().get("location") {
             let location_str = location.to_str().unwrap();
+
+            println!("location_str: {:?}", location_str);
 
             let redirected_response = rt.block_on(async {
                 http_gateway
@@ -203,6 +207,14 @@ fn test_storage_after_update_simple() {
                 .map(|(k, v)| (k.as_str(), v.to_str().unwrap()))
                 .collect::<Vec<(&str, &str)>>();
 
+            println!(
+                "redirected_response_headers: {:?}",
+                redirected_response_headers
+            );
+            println!(
+                "redirected_response.canister_response.status(): {:?}",
+                redirected_response.canister_response.status()
+            );
             assert!(redirected_response.canister_response.status() == 200);
             assert_eq!(redirected_response.canister_response.status(), 200);
 

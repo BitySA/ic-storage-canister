@@ -25,6 +25,7 @@ async fn http_request(req: HttpRequest<'static>) -> HttpResponse<'static> {
         "/metrics" => serve_metrics(),
         _ => {
             let asset_resp = serve_asset(&req);
+            trace(&format!("asset_resp: {:?}", asset_resp));
 
             match asset_resp {
                 Some(response) => response,
