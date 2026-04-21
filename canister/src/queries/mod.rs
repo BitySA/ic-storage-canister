@@ -1,3 +1,4 @@
+mod candid;
 mod http_request;
 pub mod management;
 pub mod storage;

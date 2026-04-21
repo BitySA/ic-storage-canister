@@ -1,0 +1,52 @@
+type Args = record { file_path : text };
+type Args_1 = record {
+  file_hash : text;
+  file_path : text;
+  file_size : nat64;
+  chunk_size : opt nat64;
+};
+type Args_2 = record { chunk_id : nat; file_path : text; chunk_data : blob };
+type Args_3 = variant { Upgrade : UpgradeArgs; Init : InitArgs };
+type BuildVersion = record { major : nat32; minor : nat32; patch : nat32 };
+type CancelUploadError = variant { UploadNotInitialized };
+type FinalizeUploadError = variant {
+  IncompleteUpload;
+  FileSizeMismatch;
+  FileHashMismatch;
+  UploadNotStarted;
+  UploadAlreadyFinalized;
+};
+type FinalizeUploadResp = record { url : text };
+type InitArgs = record {
+  test_mode : bool;
+  authorized_principals : vec principal;
+  version : BuildVersion;
+  commit_hash : text;
+};
+type InitUploadError = variant {
+  NotEnoughStorage;
+  FileAlreadyExists;
+  InvalidChunkSize;
+};
+type Result = variant { Ok : record {}; Err : CancelUploadError };
+type Result_1 = variant { Ok : FinalizeUploadResp; Err : FinalizeUploadError };
+type Result_2 = variant { Ok : record {}; Err : InitUploadError };
+type Result_3 = variant { Ok : record {}; Err : StoreChunkError };
+type StoreChunkError = variant {
+  InvalidFileHash;
+  InvalidFilePath;
+  InvalidFileSize;
+  InvalidChunkId;
+  UploadNotInitialized;
+  InvalidChunkData;
+  InvalidFileFormat;
+  UploadAlreadyFinalized;
+};
+type UpgradeArgs = record { version : BuildVersion; commit_hash : text };
+service : (Args_3) -> {
+  cancel_upload : (Args) -> (Result);
+  finalize_upload : (Args) -> (Result_1);
+  get_storage_size : (null) -> (nat) query;
+  init_upload : (Args_1) -> (Result_2);
+  store_chunk : (Args_2) -> (Result_3);
+}

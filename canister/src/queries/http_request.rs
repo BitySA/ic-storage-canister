@@ -1,11 +1,14 @@
 use crate::{
     state::mutate_state,
-    types::http::{get_asset_headers, ASSET_ROUTER, HTTP_TREE, NO_CACHE_ASSET_CACHE_CONTROL},
+    types::http::{
+        get_asset_headers, ASSET_ROUTER, HTTP_TREE, IMMUTABLE_ASSET_CACHE_CONTROL,
+        NO_CACHE_ASSET_CACHE_CONTROL,
+    },
     utils::trace,
 };
 use bity_ic_canister_logger::LogEntry;
 use ic_cdk::api::data_certificate;
-use ic_cdk::{trap, update};
+use ic_cdk::update;
 use ic_cdk_macros::query;
 use ic_http_certification::{
     utils::add_v2_certificate_header, DefaultCelBuilder, HttpCertification, HttpCertificationPath,
@@ -27,21 +30,97 @@ async fn http_request(req: HttpRequest<'static>) -> HttpResponse<'static> {
             let asset_resp = serve_asset(&req);
             trace(&format!("asset_resp: {:?}", asset_resp));
 
+            // FIXME: check which domain
             match asset_resp {
                 Some(response) => response,
                 None => {
-                    if req.headers().to_vec().iter().any(|(k, v)| {
+                    let is_raw = req
+                        .headers()
+                        .iter()
+                        .any(|(k, v)| k.eq_ignore_ascii_case("host") && v.contains(".raw."));
+
+                    if is_raw {
+                        serve_from_stable_memory(&req, &path)
+                    } else if req.headers().to_vec().iter().any(|(k, v)| {
                         k == "referer"
                             && v.contains(ic_cdk::api::canister_self().to_string().as_str())
                     }) {
-                        return HttpResponse::builder()
+                        HttpResponse::builder()
                             .with_status_code(StatusCode::NOT_FOUND)
-                            .build();
+                            .build()
                     } else {
-                        return HttpResponse::builder().with_upgrade(true).build();
+                        HttpResponse::builder().with_upgrade(true).build()
                     }
                 }
             }
+        }
+    }
+}
+
+fn parse_range_header(range: &str, total: usize) -> Option<(usize, usize)> {
+    if total == 0 {
+        return None;
+    }
+    let s = range.strip_prefix("bytes=")?;
+    let mut parts = s.splitn(2, '-');
+    let start: usize = parts.next()?.parse().ok()?;
+    let end = match parts.next()? {
+        "" => (start + 2 * 1024 * 1024).min(total) - 1,
+        e => e.parse::<usize>().ok()?.min(total - 1),
+    };
+    if start > end || start >= total {
+        return None;
+    }
+    Some((start, end))
+}
+
+fn serve_from_stable_memory(req: &HttpRequest, path: &str) -> HttpResponse<'static> {
+    let result = read_state(|state| state.data.storage.get_file_data(path));
+
+    match result {
+        None => HttpResponse::builder()
+            .with_status_code(StatusCode::NOT_FOUND)
+            .build(),
+        Some((data, content_type)) => {
+            let range_header = req
+                .headers()
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case("range"))
+                .map(|(_, v)| v.clone());
+
+            let total = data.len();
+            let headers = get_asset_headers(vec![
+                ("content-type".to_string(), content_type.to_string()),
+                (
+                    "cache-control".to_string(),
+                    IMMUTABLE_ASSET_CACHE_CONTROL.to_string(),
+                ),
+                ("accept-ranges".to_string(), "bytes".to_string()),
+            ]);
+
+            if let Some(range) = range_header {
+                if let Some((start, end)) = parse_range_header(&range, total) {
+                    let body = data[start..=end].to_vec();
+                    return HttpResponse::builder()
+                        .with_status_code(StatusCode::PARTIAL_CONTENT)
+                        .with_headers({
+                            let mut h = headers;
+                            h.push((
+                                "content-range".to_string(),
+                                format!("bytes {}-{}/{}", start, end, total),
+                            ));
+                            h
+                        })
+                        .with_body(body)
+                        .build();
+                }
+            }
+
+            HttpResponse::builder()
+                .with_status_code(StatusCode::OK)
+                .with_headers(headers)
+                .with_body(data)
+                .build()
         }
     }
 }
@@ -63,13 +142,24 @@ async fn http_request_update(req: HttpUpdateRequest<'static>) -> HttpUpdateRespo
                         path.clone()
                     );
 
-                    let response =
-                        HttpResponse::temporary_redirect(redirection_url, req.headers().to_vec())
-                            .build();
+                    let response = HttpResponse::temporary_redirect(
+                        redirection_url,
+                        get_asset_headers(vec![
+                            (
+                                "cache-control".to_string(),
+                                NO_CACHE_ASSET_CACHE_CONTROL.to_string(),
+                            ),
+                            ("content-type".to_string(), "text/plain".to_string()),
+                        ]),
+                    )
+                    .build();
                     HttpUpdateResponse::from(response)
                 }
-                Err(e) => {
-                    trap(&format!("Failed to cache miss: {:?}", e));
+                Err(_) => {
+                    let response = HttpResponse::builder()
+                        .with_status_code(StatusCode::NOT_FOUND)
+                        .build();
+                    HttpUpdateResponse::from(response)
                 }
             }
         }

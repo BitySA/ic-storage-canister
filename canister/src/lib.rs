@@ -11,6 +11,7 @@ pub mod types;
 pub mod updates;
 mod utils;
 
+use lifecycle::*;
 use queries::*;
 use updates::*;
 

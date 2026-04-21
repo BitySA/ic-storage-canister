@@ -7,6 +7,7 @@ ic-wasm "canister/src/target/wasm32-unknown-unknown/release/storage_canister.was
 gzip --no-name -9 -v -c "canister/src/target/wasm32-unknown-unknown/release/storage_canister.wasm" > "canister/src/target/wasm32-unknown-unknown/release/storage_canister.wasm.gz" &&
 gzip -v -t "canister/src/target/wasm32-unknown-unknown/release/storage_canister.wasm.gz" &&
 cp "canister/src/target/wasm32-unknown-unknown/release/storage_canister.wasm" "./wasm/storage_canister.wasm" &&
-candid-extractor "./wasm/storage_canister.wasm" > "./wasm/can.did" &&
+candid-extractor "./wasm/storage_canister.wasm" > "./api/can.did" &&
 cp "canister/src/target/wasm32-unknown-unknown/release/storage_canister.wasm.gz" "./integrations_tests/wasm" &&
+cp "./api/can.did" "./wasm" &&
 mv "canister/src/target/wasm32-unknown-unknown/release/storage_canister.wasm.gz" "./wasm/storage_canister.wasm.gz"

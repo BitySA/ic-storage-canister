@@ -1,0 +1,6 @@
+(record {
+  file_path = "test.png";
+  file_size = 6205837 : nat64;
+  file_hash = "1fbc34312a9f84969c481cfdde04e50fed755817ddde4e4be0c67e1bd1923f6e";
+  chunk_size = null;
+})

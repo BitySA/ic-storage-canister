@@ -1,0 +1,27 @@
+{
+  "dfx": "0.31.0",
+  "__0": "Storage Canister",
+  "canisters": {
+    "storage": {
+      "build": ["./scripts/build.sh"],
+      "candid": "./api/can.did",
+      "declarations": {
+        "bindings": ["js", "did"],
+        "env_override": null,
+        "output": "./api/declarations"
+      },
+      "type": "custom",
+      "wasm": "./wasm/storage_canister.wasm.gz"
+    }
+  },
+  "networks": {
+    "staging": {
+      "providers": ["https://icp0.io"],
+      "type": "persistent"
+    },
+    "preprod": {
+      "providers": ["https://icp0.io"],
+      "type": "persistent"
+    }
+  }
+}

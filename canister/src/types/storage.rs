@@ -5,7 +5,7 @@ use ic_asset_certification::Asset;
 use super::http::{certify_asset, uncertify_asset};
 use crate::memory::get_data_storage_memory;
 use crate::memory::VM;
-use crate::utils::trace;
+use crate::utils::{get_content_type_for_path, trace};
 use bity_ic_utils::env::CanisterEnv;
 use hex;
 use ic_cdk::stable::{stable_size, WASM_PAGE_SIZE_IN_BYTES};
@@ -51,6 +51,7 @@ impl StorageData {
             max_storage_size_wasm32: max_storage_size_wasm32,
         }
     }
+
     pub fn get_storage_size_bytes(&self) -> u128 {
         let num_pages = stable_size();
         let bytes = (num_pages as usize) * (WASM_PAGE_SIZE_IN_BYTES as usize);
@@ -232,6 +233,16 @@ impl StorageData {
                 path.clone()
             ),
         })
+    }
+
+    pub fn get_file_data(&self, path: &str) -> Option<(Vec<u8>, &'static str)> {
+        let key = path.trim_start_matches('/');
+        let metadata = self.storage_raw_internal_metadata.get(key)?;
+        if metadata.state != UploadState::Finalized {
+            return None;
+        }
+        let data = self.storage_raw.get(&key.to_string())?;
+        Some((data, get_content_type_for_path(key)))
     }
 
     pub fn get_all_files(&self) -> Vec<(InternalRawStorageMetadata, Vec<u8>)> {
