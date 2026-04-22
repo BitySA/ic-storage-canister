@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-CANISTER_ID="uzt4z-lp777-77774-qaabq-cai"
+CANISTER_ID=$(dfx canister id storage --network local)
 NETWORK="local"
 CHUNK_SIZE=1048576  # 1MiB — must match DEFAULT_CHUNK_SIZE in canister/src/types/storage.rs
 

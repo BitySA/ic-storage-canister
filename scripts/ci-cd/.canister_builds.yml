@@ -1,0 +1,34 @@
+spec:
+  inputs:
+    src-folder:
+      description: Name of the source folder, should be the same as the canister's cargo package name.
+      options:
+        [
+          "storage_canister",
+        ]
+---
+
+$[[ inputs.src-folder ]] integration-test build:
+  stage: integration_testing
+  rules:
+    - if: >
+        $CI_COMMIT_TAG =~ '/^[a-zA-Z0-9_]+-v\d+\.\d+\.\d+(-reinstall)?$/' &&
+        $CI_COMMIT_TAG !~ '/gld_dashboard|gld_landing_page|gldt_swap_app/'
+      when: always
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" &&
+          $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "develop"
+      changes:
+        - "api/**/*.{rs,toml,lock,md,did,wasm,gz}"
+        - "c2c/**/*.{rs,toml,lock,md,did,wasm,gz}"
+        - "canister/**/*.{rs,toml,lock,md,did,wasm,gz}"
+        - "integrations_tests/**/*.{rs,toml,lock,md,did,wasm,gz}"
+      needs: ["integration tests trigger"]
+  extends: .rust template
+  script:
+    - scripts/build.sh
+    - scripts/generate_did.sh
+  artifacts:
+    name: "$[[ inputs.src-folder ]]-${CI_COMMIT_SHORT_SHA}-wasm-INT_TEST_BUILD"
+    paths:
+      - canister/target/wasm32-unknown-unknown/release
+    expire_in: 1 day

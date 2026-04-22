@@ -1,0 +1,89 @@
+spec:
+  inputs:
+    src-folder:
+      description: Name of the source folder, should be the same as the canister's cargo package name.
+      options:
+        [
+          "storage_canister",
+        ]
+---
+# Rust canister unit test with coverage
+
+$[[ inputs.src-folder ]] tests:
+  stage: test
+  variables:
+    KUBERNETES_MEMORY_LIMIT: "5Gi"
+    KUBERNETES_MEMORY_REQUEST: "5Gi"
+    KUBERNETES_CPU_LIMIT: "2"
+    KUBERNETES_CPU_REQUEST: "1"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - "api/**/*.{rs,toml}"
+        - "c2c/**/*.{rs,toml}"
+        - "canister/**/*.{rs,toml}"
+    - if: $CI_OPEN_MERGE_REQUESTS
+      when: never
+      changes:
+        - "api/**/*.{rs,toml}"
+        - "c2c/**/*.{rs,toml}"
+        - "canister/**/*.{rs,toml}"
+    - if: $CI_COMMIT_REF_NAME == "develop"
+      changes:
+        - "api/**/*.{rs,toml}"
+        - "c2c/**/*.{rs,toml}"
+        - "canister/**/*.{rs,toml}"
+  extends: .rust template
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_SECURITY_OPT: "--security-opt seccomp=unconfined"
+  script:
+    - cargo test -p $[[ inputs.src-folder ]]
+
+
+integration tests trigger:
+  stage: integration_testing
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" &&
+          $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "develop"
+      changes:
+        - "api/**/*.{rs,toml,lock,md,did,wasm,gz}"
+        - "c2c/**/*.{rs,toml,lock,md,did,wasm,gz}"
+        - "canister/**/*.{rs,toml,lock,md,did,wasm,gz}"
+        - "integrations_tests/**/*.{rs,toml,lock,md,did,wasm,gz}"
+      when: manual
+  script:
+    - echo "Running integration tests"
+
+integration tests:
+  stage: integration_testing
+  variables:
+    KUBERNETES_MEMORY_LIMIT: "5Gi"
+    KUBERNETES_MEMORY_REQUEST: "5Gi"
+    KUBERNETES_CPU_LIMIT: "2"
+    KUBERNETES_CPU_REQUEST: "1"
+  rules:
+    - if: >
+        $CI_COMMIT_TAG =~ '/^[a-zA-Z0-9_]+-v\d+\.\d+\.\d+(-reinstall)?$/' &&
+        $CI_COMMIT_TAG !~ '/gld_dashboard|gld_landing_page|gldt_swap_app/'
+      when: always
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" &&
+          $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "develop"
+      changes:
+        - "api/**/*.{rs,toml,lock,md,did,wasm,gz}"
+        - "c2c/**/*.{rs,toml,lock,md,did,wasm,gz}"
+        - "canister/**/*.{rs,toml,lock,md,did,wasm,gz}"
+        - "integrations_tests/**/*.{rs,toml,lock,md,did,wasm,gz}"
+  needs:
+    [
+      "storage_canister integration-test build",
+    ]
+  extends: .rust template
+  script:
+    - wget -O pocket-ic.gz https://github.com/dfinity/pocketic/releases/download/9.0.1/pocket-ic-x86_64-linux.gz
+    - gzip -d pocket-ic.gz
+    - chmod +x ./pocket-ic
+    - mv ./pocket-ic ./integrations_tests/pocket-ic
+    - ulimit -n 809600
+    - ulimit -f 8096000
+    - cargo test -p integrations_tests

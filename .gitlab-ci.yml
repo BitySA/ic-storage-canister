@@ -1,0 +1,57 @@
+default:
+  image: dckreg.bity.com/bity/dev/runners_images/dfinity-canisters:0.31.0
+  interruptible: true
+  before_script:
+    - dfx --version
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+      - api_failure
+      - runner_unsupported
+      - unknown_failure
+
+cache:
+  - key: "dfx-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .dfx
+
+stages:
+  - lint
+  - build
+  - test
+  - integration_testing
+  - deploy
+
+include:
+  # Templates:
+  - local: scripts/ci-cd/.rust_template.yml
+
+  - local: scripts/ci-cd/.canister_tests.yml
+    inputs:
+      src-folder: storage_canister
+
+  - local: scripts/ci-cd/.canister_builds.yml
+    inputs:
+      src-folder: storage_canister
+      
+rust lint:
+  stage: lint
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - "Cargo.{lock,toml}"
+        - "{api,c2c,canister,integrations_tests}/**/*.{rs,toml,lock}"
+    - if: $CI_OPEN_MERGE_REQUESTS
+      when: never
+      changes:
+        - "Cargo.{lock,toml}"
+        - "{api,c2c,canister,integrations_tests}/**/*.{rs,toml,lock}"
+    - if: $CI_COMMIT_REF_NAME == "develop"
+      changes:
+        - "Cargo.{lock,toml}"
+        - "{api,c2c,canister,integrations_tests}/**/*.{rs,toml,lock}"
+  extends: .rust template
+  script:
+    - cargo clippy
