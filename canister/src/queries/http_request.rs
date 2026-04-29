@@ -30,7 +30,6 @@ async fn http_request(req: HttpRequest<'static>) -> HttpResponse<'static> {
             let asset_resp = serve_asset(&req);
             trace(&format!("asset_resp: {:?}", asset_resp));
 
-            // FIXME: check which domain
             match asset_resp {
                 Some(response) => response,
                 None => {
@@ -65,7 +64,7 @@ fn parse_range_header(range: &str, total: usize) -> Option<(usize, usize)> {
     let mut parts = s.splitn(2, '-');
     let start: usize = parts.next()?.parse().ok()?;
     let end = match parts.next()? {
-        "" => (start + 2 * 1024 * 1024).min(total) - 1,
+        "" => (start + 1024 * 1024).min(total) - 1,
         e => e.parse::<usize>().ok()?.min(total - 1),
     };
     if start > end || start >= total {
