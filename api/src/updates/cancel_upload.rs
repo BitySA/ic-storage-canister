@@ -14,4 +14,6 @@ pub type Response = Result<CancelUploadResp, CancelUploadError>;
 #[derive(Serialize, Deserialize, CandidType, Debug)]
 pub enum CancelUploadError {
     UploadNotInitialized,
+    UploadAlreadyFinalized,
+    InvalidFilePath,
 }

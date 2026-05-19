@@ -2,6 +2,39 @@ pub fn trace(msg: &str) {
     ic0::debug_print(msg.as_bytes());
 }
 
+pub const MAX_FILE_PATH_LEN: usize = 512;
+
+/// Validate a file_path before it becomes a storage key or part of a certified URL.
+///
+/// Why these rules:
+/// - Length bound prevents a caller from inflating the HashMap key footprint.
+/// - Control chars (\0 \r \n) and ?/# would split or escape URLs once the path
+///   is interpolated into the response.
+/// - `..` segments would let a caller alias paths after string normalization.
+pub fn validate_file_path(p: &str) -> Result<(), &'static str> {
+    if p.is_empty() {
+        return Err("file_path is empty");
+    }
+    if p.len() > MAX_FILE_PATH_LEN {
+        return Err("file_path too long");
+    }
+    for ch in p.chars() {
+        match ch {
+            '\0' | '\r' | '\n' | '?' | '#' => return Err("file_path contains forbidden character"),
+            c if c.is_control() => return Err("file_path contains control character"),
+            _ => {}
+        }
+    }
+    // Strip a single leading '/' for segment validation; canonical storage form is no leading '/'.
+    let stripped = p.strip_prefix('/').unwrap_or(p);
+    for seg in stripped.split('/') {
+        if seg == ".." {
+            return Err("file_path contains '..' segment");
+        }
+    }
+    Ok(())
+}
+
 pub fn get_content_type_for_path(path: &str) -> &'static str {
     let ext = path.rsplit('.').next().unwrap_or("");
     match ext {
@@ -59,4 +92,58 @@ pub fn get_content_type_for_path(path: &str) -> &'static str {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_file_path_accepts_simple_paths() {
+        assert!(validate_file_path("/cat.png").is_ok());
+        assert!(validate_file_path("cat.png").is_ok());
+        assert!(validate_file_path("/dir/sub/file.mp4").is_ok());
+        assert!(validate_file_path("a").is_ok());
+    }
+
+    #[test]
+    fn validate_file_path_rejects_empty() {
+        assert!(validate_file_path("").is_err());
+    }
+
+    #[test]
+    fn validate_file_path_rejects_traversal() {
+        assert!(validate_file_path("/../etc/passwd").is_err());
+        assert!(validate_file_path("a/../b").is_err());
+        assert!(validate_file_path("..").is_err());
+    }
+
+    #[test]
+    fn validate_file_path_allows_dotfiles_and_dotdot_in_filename() {
+        // Segment-level check, so ".." as a segment is rejected but a name
+        // containing dots is fine.
+        assert!(validate_file_path("/.hidden").is_ok());
+        assert!(validate_file_path("/foo..bar").is_ok());
+        assert!(validate_file_path("/foo.bar.baz").is_ok());
+    }
+
+    #[test]
+    fn validate_file_path_rejects_control_chars() {
+        assert!(validate_file_path("/foo\0bar").is_err());
+        assert!(validate_file_path("/foo\rbar").is_err());
+        assert!(validate_file_path("/foo\nbar").is_err());
+        assert!(validate_file_path("/foo\u{0007}bar").is_err());
+    }
+
+    #[test]
+    fn validate_file_path_rejects_url_metacharacters() {
+        assert!(validate_file_path("/foo?bar").is_err());
+        assert!(validate_file_path("/foo#bar").is_err());
+    }
+
+    #[test]
+    fn validate_file_path_enforces_length_limit() {
+        let ok_path = "/".to_string() + &"a".repeat(MAX_FILE_PATH_LEN - 1);
+        assert!(validate_file_path(&ok_path).is_ok());
+
+        let too_long = "/".to_string() + &"a".repeat(MAX_FILE_PATH_LEN);
+        assert!(validate_file_path(&too_long).is_err());
+    }
+}

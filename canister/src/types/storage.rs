@@ -5,17 +5,33 @@ use ic_asset_certification::Asset;
 use super::http::{certify_asset, uncertify_asset};
 use crate::memory::get_data_storage_memory;
 use crate::memory::VM;
-use crate::utils::{get_content_type_for_path, trace};
+use crate::utils::{get_content_type_for_path, trace, validate_file_path};
 use bity_ic_utils::env::CanisterEnv;
 use hex;
 use ic_cdk::stable::{stable_size, WASM_PAGE_SIZE_IN_BYTES};
-use ic_cdk::trap;
 use ic_stable_structures::StableBTreeMap;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
 const DEFAULT_CHUNK_SIZE: u64 = 1 * 1024 * 1024;
+
+/// Upper bound on number of chunks per file. Multiplied by chunk size, this puts
+/// a ceiling on the metadata vector pre-allocated at init_upload, independent of
+/// MAX_FILE_SIZE. With DEFAULT_CHUNK_SIZE = 1 MiB and MAX_CHUNKS_PER_FILE = 10_000,
+/// a single file can be up to ~10 GiB without forcing a huge chunk size.
+pub const MAX_CHUNKS_PER_FILE: u64 = 10_000;
+
+/// Hard cap on number of files (finalized + in-flight) tracked by one canister.
+/// Bounds heap usage from metadata flooding: cap * sizeof(InternalRawStorageMetadata).
+pub const MAX_FILES_PER_CANISTER: usize = 100_000;
+
+/// Time (ns) when this upload was initiated. Used by the abandoned-upload GC.
+/// On deserialization of old state (pre-S8), defaults to canister `now` so
+/// in-flight uploads survive an upgrade with a fresh TTL.
+fn default_init_timestamp() -> u64 {
+    ic_cdk::api::time()
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InternalRawStorageMetadata {
@@ -26,6 +42,8 @@ pub struct InternalRawStorageMetadata {
     pub chunks_size: u64,
     pub chunks: Vec<Vec<u8>>,
     pub state: UploadState,
+    #[serde(default = "default_init_timestamp")]
+    pub init_timestamp: u64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -79,11 +97,19 @@ impl StorageData {
     ) -> Result<init_upload::InitUploadResp, init_upload::InitUploadError> {
         trace(&format!("init_upload - file_path: {:?}", data.file_path));
 
+        validate_file_path(&data.file_path)
+            .map_err(|_| init_upload::InitUploadError::InvalidFilePath)?;
+
         let path = if data.file_path.starts_with('/') {
             data.file_path[1..].to_string()
         } else {
             data.file_path
         };
+
+        // Bound the total number of files to keep metadata heap usage predictable.
+        if self.storage_raw_internal_metadata.len() >= MAX_FILES_PER_CANISTER {
+            return Err(init_upload::InitUploadError::TooManyFiles);
+        }
 
         // Check if the file already exists
         if self.storage_raw_internal_metadata.contains_key(&path) {
@@ -99,7 +125,16 @@ impl StorageData {
             return Err(init_upload::InitUploadError::InvalidChunkSize);
         }
 
-        let num_chunks = (data.file_size + chunk_size - 1) / chunk_size;
+        let num_chunks = if data.file_size == 0 {
+            0
+        } else {
+            (data.file_size + chunk_size - 1) / chunk_size
+        };
+
+        // Bound chunk-vector pre-allocation regardless of chunk_size choice.
+        if num_chunks > MAX_CHUNKS_PER_FILE {
+            return Err(init_upload::InitUploadError::TooManyChunks);
+        }
 
         let metadata: InternalRawStorageMetadata = InternalRawStorageMetadata {
             file_path: path.clone(),
@@ -109,6 +144,7 @@ impl StorageData {
             chunks_size: chunk_size,
             chunks: vec![vec![]; num_chunks as usize],
             state: UploadState::Init,
+            init_timestamp: ic_cdk::api::time(),
         };
 
         self.storage_raw_internal_metadata.insert(path, metadata);
@@ -116,11 +152,37 @@ impl StorageData {
         Ok(init_upload::InitUploadResp {})
     }
 
+    /// Sweep abandoned uploads: any entry still in `Init` or `InProgress` whose
+    /// `init_timestamp` is older than `ttl_nanos` is removed. Returns the number
+    /// of entries removed. Cheap to run (single iteration); intended for an
+    /// hourly heartbeat.
+    pub fn gc_abandoned_uploads(&mut self, now: u64, ttl_nanos: u64) -> usize {
+        let cutoff = now.saturating_sub(ttl_nanos);
+        let stale: Vec<String> = self
+            .storage_raw_internal_metadata
+            .iter()
+            .filter_map(|(path, m)| match m.state {
+                UploadState::Finalized => None,
+                _ if m.init_timestamp <= cutoff => Some(path.clone()),
+                _ => None,
+            })
+            .collect();
+        let n = stale.len();
+        for path in stale {
+            trace(&format!("gc_abandoned_uploads: removing {path}"));
+            self.storage_raw_internal_metadata.remove(&path);
+        }
+        n
+    }
+
     pub fn store_chunk(
         &mut self,
         data: store_chunk::Args,
     ) -> Result<store_chunk::StoreChunkResp, store_chunk::StoreChunkError> {
         trace(&format!("store_chunk - hash_id: {:?}", data.file_path));
+
+        validate_file_path(&data.file_path)
+            .map_err(|_| store_chunk::StoreChunkError::InvalidFilePath)?;
 
         let path = if data.file_path.starts_with('/') {
             data.file_path[1..].to_string()
@@ -145,7 +207,11 @@ impl StorageData {
 
         let file_size = metadata.file_size;
         let received_size = metadata.received_size;
-        let chunk_index = usize::try_from(data.chunk_id.0).unwrap();
+        let chunk_index = usize::try_from(data.chunk_id.0)
+            .map_err(|_| store_chunk::StoreChunkError::InvalidChunkId)?;
+        if chunk_index >= metadata.chunks.len() {
+            return Err(store_chunk::StoreChunkError::InvalidChunkId);
+        }
 
         if received_size + (data.chunk_data.len() as u64) > file_size {
             return Err(store_chunk::StoreChunkError::InvalidChunkData);
@@ -167,6 +233,9 @@ impl StorageData {
         data: finalize_upload::Args,
     ) -> Result<finalize_upload::FinalizeUploadResp, finalize_upload::FinalizeUploadError> {
         trace(&format!("finalize_upload - hash_id: {:?}", data.file_path));
+
+        validate_file_path(&data.file_path)
+            .map_err(|_| finalize_upload::FinalizeUploadError::InvalidFilePath)?;
 
         let path = if data.file_path.starts_with('/') {
             data.file_path[1..].to_string()
@@ -198,8 +267,9 @@ impl StorageData {
             return Err(finalize_upload::FinalizeUploadError::IncompleteUpload);
         }
 
+        // Drain chunks into the assembled buffer to avoid an extra full-file clone.
         let mut file_data = Vec::with_capacity(file_size as usize);
-        for chunk in metadata.chunks.clone() {
+        for chunk in metadata.chunks.drain(..) {
             file_data.extend(chunk);
         }
 
@@ -215,12 +285,14 @@ impl StorageData {
             return Err(finalize_upload::FinalizeUploadError::FileHashMismatch);
         }
 
-        metadata.chunks.clear();
         metadata.state = UploadState::Finalized;
 
+        // Insert raw bytes BEFORE re-inserting metadata. If a future panic ever lands
+        // between these two writes, the next call sees metadata absent rather than
+        // a Finalized metadata pointing at non-existent bytes.
+        self.storage_raw.insert(path.clone(), file_data);
         self.storage_raw_internal_metadata
-            .insert(path.clone(), metadata.clone());
-        self.storage_raw.insert(path.clone(), file_data.clone());
+            .insert(path.clone(), metadata);
 
         // certify_asset(vec![Asset::new(metadata.file_path, file_data)]);
 
@@ -249,11 +321,17 @@ impl StorageData {
         self.storage_raw_internal_metadata
             .iter()
             .filter_map(|(hash_id, metadata)| {
-                if metadata.state == UploadState::Finalized {
-                    let raw_data = self.storage_raw.get(hash_id).unwrap().clone();
-                    Some((metadata.clone(), raw_data))
-                } else {
-                    None
+                if metadata.state != UploadState::Finalized {
+                    return None;
+                }
+                match self.storage_raw.get(hash_id) {
+                    Some(raw_data) => Some((metadata.clone(), raw_data)),
+                    None => {
+                        trace(&format!(
+                            "get_all_files: metadata marked Finalized but raw bytes missing for {hash_id}, skipping"
+                        ));
+                        None
+                    }
                 }
             })
             .collect()
@@ -263,21 +341,25 @@ impl StorageData {
         &mut self,
         file_path: String,
     ) -> Result<cancel_upload::CancelUploadResp, cancel_upload::CancelUploadError> {
+        validate_file_path(&file_path)
+            .map_err(|_| cancel_upload::CancelUploadError::InvalidFilePath)?;
+
         let path = if file_path.starts_with('/') {
             file_path[1..].to_string()
         } else {
             file_path
         };
 
-        let metadata = self
-            .storage_raw_internal_metadata
-            .remove(&path)
-            .ok_or(cancel_upload::CancelUploadError::UploadNotInitialized)?;
-
-        if metadata.state == UploadState::Finalized {
-            trap("Cannot cancel a finalized upload");
+        // Peek state before removing so we don't delete a finalized file by mistake.
+        match self.storage_raw_internal_metadata.get(&path) {
+            None => return Err(cancel_upload::CancelUploadError::UploadNotInitialized),
+            Some(m) if m.state == UploadState::Finalized => {
+                return Err(cancel_upload::CancelUploadError::UploadAlreadyFinalized);
+            }
+            Some(_) => {}
         }
 
+        self.storage_raw_internal_metadata.remove(&path);
         Ok(cancel_upload::CancelUploadResp {})
     }
 
@@ -312,7 +394,14 @@ impl StorageData {
 
         let file_size = metadata.file_size as u64;
 
-        let file_data = self.storage_raw.get(&path).unwrap();
+        let file_data = self
+            .storage_raw
+            .get(&path)
+            .ok_or_else(|| {
+                format!(
+                    "cache_miss: metadata marked Finalized but raw bytes missing for {path}"
+                )
+            })?;
 
         if free_heap_size < file_size {
             trace(&format!(
@@ -354,7 +443,16 @@ impl StorageData {
             }
 
             let file_size = metadata.file_size as u64;
-            let file_data = self.storage_raw.get(&key).unwrap().clone();
+            let file_data = match self.storage_raw.get(&key) {
+                Some(d) => d,
+                None => {
+                    trace(&format!(
+                        "free_http_cache: metadata marked Finalized but raw bytes missing for {key}, dropping from certified set"
+                    ));
+                    self.certified_assets.retain(|asset| asset != &key);
+                    continue;
+                }
+            };
 
             uncertify_asset(vec![Asset::new(
                 metadata.file_path.clone(),

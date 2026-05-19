@@ -1,4 +1,7 @@
-use crate::storage_suite::setup::setup_storage::setup_storage_canister;
+use crate::storage_suite::setup::setup_storage::{
+    setup_storage_canister, setup_storage_canister_with_wasm,
+};
+use bity_ic_types::CanisterWasm;
 use crate::utils::random_principal;
 use bity_ic_storage_canister_api::init::InitArgs;
 use bity_ic_storage_canister_api::lifecycle::Args;
@@ -68,7 +71,21 @@ impl TestEnvBuilder {
     }
 
     pub fn build(&mut self) -> TestEnv {
-        println!("Start building TestEnv");
+        self.build_with_wasm(None)
+    }
+
+    /// Build a TestEnv with a specific historical storage canister WASM installed.
+    /// Pass the corresponding lazy_static fixture from `crate::wasms`. Used by
+    /// version-pair migration tests.
+    pub fn build_with_historical_wasm(&mut self, wasm: CanisterWasm) -> TestEnv {
+        self.build_with_wasm(Some(wasm))
+    }
+
+    fn build_with_wasm(&mut self, override_wasm: Option<CanisterWasm>) -> TestEnv {
+        println!(
+            "Start building TestEnv (historical_wasm={})",
+            override_wasm.is_some()
+        );
 
         let mut pic = PocketIcBuilder::new()
             .with_application_subnet()
@@ -94,12 +111,21 @@ impl TestEnvBuilder {
             authorized_principals: vec![self.controller.clone()],
         });
 
-        let storage_canister_id = setup_storage_canister(
-            &mut pic,
-            self.storage_canister_id,
-            storage_init_args,
-            self.controller,
-        );
+        let storage_canister_id = match override_wasm {
+            Some(wasm) => setup_storage_canister_with_wasm(
+                &mut pic,
+                self.storage_canister_id,
+                wasm,
+                storage_init_args,
+                self.controller,
+            ),
+            None => setup_storage_canister(
+                &mut pic,
+                self.storage_canister_id,
+                storage_init_args,
+                self.controller,
+            ),
+        };
 
         pic.tick();
         pic.advance_time(Duration::from_millis(MINUTE_IN_MS * 30));

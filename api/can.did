@@ -8,8 +8,13 @@ type Args_1 = record {
 type Args_2 = record { chunk_id : nat; file_path : text; chunk_data : blob };
 type Args_3 = variant { Upgrade : UpgradeArgs; Init : InitArgs };
 type BuildVersion = record { major : nat32; minor : nat32; patch : nat32 };
-type CancelUploadError = variant { UploadNotInitialized };
+type CancelUploadError = variant {
+  InvalidFilePath;
+  UploadNotInitialized;
+  UploadAlreadyFinalized;
+};
 type FinalizeUploadError = variant {
+  InvalidFilePath;
   IncompleteUpload;
   FileSizeMismatch;
   FileHashMismatch;
@@ -24,8 +29,11 @@ type InitArgs = record {
   commit_hash : text;
 };
 type InitUploadError = variant {
+  InvalidFilePath;
+  TooManyChunks;
   NotEnoughStorage;
   FileAlreadyExists;
+  TooManyFiles;
   InvalidChunkSize;
 };
 type Result = variant { Ok : record {}; Err : CancelUploadError };

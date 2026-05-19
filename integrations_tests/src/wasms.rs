@@ -13,8 +13,42 @@ lazy_static! {
     // pub static ref ICP_LEDGER: CanisterWasm = get_canister_wasm("ledger");
     // pub static ref REGISTRY_WASM: CanisterWasm = get_canister_wasm("registry");
 
-    // Wasms in particular canister folder
+    // Wasms in particular canister folder.
+    // STORAGE_WASM is whatever the working tree builds — the current/under-development
+    // version. Historical wasms are pinned by published version below.
     pub static ref STORAGE_WASM: CanisterWasm = get_canister_wasm_from_bin("storage_canister");
+
+    // Historical storage canister WASMs, kept as fixtures for version-pair migration tests.
+    // Version refers to `canister/Cargo.toml`'s `version` (the canister cdylib itself),
+    // NOT the published api/c2c crate versions — those are independent.
+    //
+    // To add another historical version: drop the .wasm.gz into integrations_tests/wasm/
+    // as `storage_canister_v<MAJOR>_<MINOR>_<PATCH>.wasm.gz` and add a matching
+    // lazy_static below. Never repurpose an existing fixture name.
+
+    // v0.2.0: pre-fix master (commit cdeb4d6). The "videos don't load" build.
+    pub static ref STORAGE_WASM_V0_2_0: CanisterWasm =
+        get_canister_wasm_from_local_fixture("storage_canister_v0_2_0");
+
+    // v0.2.1: post-fix master (commit ed9e765). The build origyn-nft's
+    // 4-storage-canister-migration branch currently bundles.
+    pub static ref STORAGE_WASM_V0_2_1: CanisterWasm =
+        get_canister_wasm_from_local_fixture("storage_canister_v0_2_1");
+}
+
+/// Read a historical-version fixture committed to `integrations_tests/wasm/`.
+/// Distinct from `get_canister_wasm_from_bin`, which reads the under-development
+/// WASM produced by `scripts/build.sh` into the gitignored top-level `wasm/`.
+fn get_canister_wasm_from_local_fixture(canister_name: &str) -> CanisterWasm {
+    match read_file_from_relative_bin(&format!("wasm/{canister_name}.wasm.gz")) {
+        Ok(wasm) => wasm,
+        Err(err) => {
+            println!(
+                "Failed to read {canister_name} fixture wasm from integrations_tests/wasm/: {err}"
+            );
+            panic!()
+        }
+    }
 }
 
 fn get_canister_wasm_from_bin(canister_name: &str) -> CanisterWasm {

@@ -19,4 +19,7 @@ pub enum InitUploadError {
     FileAlreadyExists,
     NotEnoughStorage,
     InvalidChunkSize,
+    InvalidFilePath,
+    TooManyChunks,
+    TooManyFiles,
 }

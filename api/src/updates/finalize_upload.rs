@@ -20,4 +20,5 @@ pub enum FinalizeUploadError {
     IncompleteUpload,
     FileSizeMismatch,
     FileHashMismatch,
+    InvalidFilePath,
 }

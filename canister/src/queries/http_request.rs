@@ -100,6 +100,7 @@ fn serve_from_stable_memory(req: &HttpRequest, path: &str) -> HttpResponse<'stat
             if let Some(range) = range_header {
                 if let Some((start, end)) = parse_range_header(&range, total) {
                     let body = data[start..=end].to_vec();
+                    let body_len = body.len();
                     return HttpResponse::builder()
                         .with_status_code(StatusCode::PARTIAL_CONTENT)
                         .with_headers({
@@ -108,6 +109,7 @@ fn serve_from_stable_memory(req: &HttpRequest, path: &str) -> HttpResponse<'stat
                                 "content-range".to_string(),
                                 format!("bytes {}-{}/{}", start, end, total),
                             ));
+                            h.push(("content-length".to_string(), body_len.to_string()));
                             h
                         })
                         .with_body(body)
@@ -195,6 +197,7 @@ fn serve_logs(logs: Vec<LogEntry>) -> HttpResponse<'static> {
             add_v2_certificate_header(
                 &data_certificate().expect("No data certificate available"),
                 &mut response,
+                // witness on the entry we just inserted: provably present
                 &tree.witness(&metrics_tree_entry, "/metrics").unwrap(),
                 &metrics_tree_path.to_expr_path(),
             );
@@ -235,6 +238,7 @@ fn serve_metrics() -> HttpResponse<'static> {
             add_v2_certificate_header(
                 &data_certificate().expect("No data certificate available"),
                 &mut response,
+                // witness on the entry we just inserted: provably present
                 &tree.witness(&metrics_tree_entry, "/metrics").unwrap(),
                 &metrics_tree_path.to_expr_path(),
             );

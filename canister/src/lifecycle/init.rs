@@ -1,3 +1,4 @@
+use crate::jobs;
 use crate::lifecycle::init_canister;
 use crate::state::{Data, RuntimeState};
 use bity_ic_canister_tracing_macros::trace;
@@ -32,6 +33,7 @@ fn init(args: Args) {
             let runtime_state = RuntimeState::new(env, data);
 
             init_canister(runtime_state);
+            jobs::start_jobs();
 
             info!("Init complete.")
         }

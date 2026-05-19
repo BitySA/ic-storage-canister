@@ -1,5 +1,6 @@
 use crate::wasms::STORAGE_WASM;
 use bity_ic_storage_canister_api::lifecycle::Args;
+use bity_ic_types::CanisterWasm;
 use candid::encode_one;
 use candid::Principal;
 use pocket_ic::PocketIc;
@@ -55,4 +56,33 @@ pub fn upgrade_storage_canister(
         Some(controller.clone()),
     )
     .unwrap();
+}
+
+/// Install an arbitrary storage canister WASM (typically a historical version
+/// fixture from `crate::wasms`). Used by version-pair migration tests.
+pub fn setup_storage_canister_with_wasm(
+    pic: &mut PocketIc,
+    storage_canister_id: Principal,
+    wasm: CanisterWasm,
+    args: Args,
+    controller: Principal,
+) -> Principal {
+    pic.add_cycles(storage_canister_id, 100_000_000_000_000_000);
+
+    pic.set_controllers(
+        storage_canister_id,
+        Some(controller.clone()),
+        vec![controller.clone()],
+    )
+    .unwrap();
+    pic.tick();
+
+    pic.install_canister(
+        storage_canister_id,
+        wasm,
+        encode_one(args).unwrap(),
+        Some(controller.clone()),
+    );
+
+    storage_canister_id
 }

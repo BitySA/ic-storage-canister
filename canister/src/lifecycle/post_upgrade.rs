@@ -1,3 +1,4 @@
+use crate::jobs;
 use crate::memory::get_upgrades_memory;
 use crate::state::RuntimeState;
 use crate::{lifecycle::init_canister, utils::trace};
@@ -39,6 +40,7 @@ fn post_upgrade(args: Args) {
 
             bity_ic_canister_logger::init_with_logs(state.env.is_test_mode(), logs, traces);
             init_canister(state);
+            jobs::start_jobs();
             // certify_all_assets();
 
             info!(version = %upgrade_args.version, "Post-upgrade complete");
