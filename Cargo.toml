@@ -7,6 +7,13 @@ members = [
 ]
 resolver = "2"
 
+# Single source of truth for the published crate versions. api, c2c and canister
+# inherit this via `version.workspace = true`, so a release bumps them in lockstep.
+# (integration_tests keeps its own version: it is a private test crate, never published.)
+[workspace.package]
+version = "0.4.0"
+edition = "2021"
+
 [profile.release]
 lto = "thin"
 panic = "abort"
@@ -60,6 +67,12 @@ ic-asset-certification = "3.1.0"
 ic-http-certification = "3.1.0"
 lazy_static = "1.4.0"
 url = "2.5.8"
+
+# Intra-workspace dep. `path` is used for local/workspace builds; `version` is what
+# ends up in the published c2c manifest, so `cargo publish` works once api is on crates.io.
+# The version must track [workspace.package].version on each release (cargo cannot
+# inherit workspace.package.version into a dependency entry).
+bity-ic-storage-canister-api    = { path = "api", version = "0.4.0" }
 
 bity-ic-canister-client         = "0.3.0"
 bity-ic-canister-logger         = "0.3.0"

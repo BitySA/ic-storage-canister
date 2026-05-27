@@ -1,7 +1,7 @@
 [package]
 name = "storage_canister"
-version = "0.4.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -34,7 +34,7 @@ ic0 = { workspace = true }
 ic-asset-certification = { workspace = true}
 ic-http-certification = { workspace = true}
 
-bity-ic-storage-canister-api = { path = "../api", features = []}
+bity-ic-storage-canister-api = { workspace = true, features = [] }
 
 bity-ic-canister-client = { workspace = true }
 bity-ic-canister-logger = { workspace = true }
