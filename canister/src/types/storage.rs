@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
+const REUPLOAD_PREFIX: &str = "__reupload__:";
+
 const DEFAULT_CHUNK_SIZE: u64 = 1 * 1024 * 1024;
 
 /// Upper bound on number of chunks per file. Multiplied by chunk size, this puts
@@ -100,11 +102,16 @@ impl StorageData {
         validate_file_path(&data.file_path)
             .map_err(|_| init_upload::InitUploadError::InvalidFilePath)?;
 
-        let path = if data.file_path.starts_with('/') {
+        let mut path = if data.file_path.starts_with('/') {
             data.file_path[1..].to_string()
         } else {
             data.file_path
         };
+
+        let is_reupload = path.contains(REUPLOAD_PREFIX);
+        if is_reupload {
+            path = path.replace(REUPLOAD_PREFIX, "");
+        }
 
         // Bound the total number of files to keep metadata heap usage predictable.
         if self.storage_raw_internal_metadata.len() >= MAX_FILES_PER_CANISTER {
@@ -112,13 +119,34 @@ impl StorageData {
         }
 
         // Check if the file already exists
-        if self.storage_raw_internal_metadata.contains_key(&path) {
-            return Err(init_upload::InitUploadError::FileAlreadyExists);
+        let existing_metadata = self.storage_raw_internal_metadata.get(&path);
+
+        if is_reupload {
+            match existing_metadata {
+                None => {
+                    // Re-upload requires the file to exist
+                    return Err(init_upload::InitUploadError::InvalidFilePath);
+                }
+                Some(meta) => {
+                    // --- FILE SIZE VALIDATION FOR RE-UPLOADS ---
+                    if meta.file_size != data.file_size {
+                        return Err(init_upload::InitUploadError::InvalidFilePath);
+                        // Note: If init_upload::InitUploadError has a size mismatch variant, use it here.
+                    }
+                }
+            }
+        } else {
+            if existing_metadata.is_some() {
+                return Err(init_upload::InitUploadError::FileAlreadyExists);
+            }
+
+            // Standard storage check only necessary for clean uploads,
+            // since a re-upload keeps the file size identical and won't consume new permanent space.
+            if self.get_free_storage_size_bytes() < (data.file_size as u128) {
+                return Err(init_upload::InitUploadError::NotEnoughStorage);
+            }
         }
 
-        if self.get_free_storage_size_bytes() < (data.file_size as u128) {
-            return Err(init_upload::InitUploadError::NotEnoughStorage);
-        }
         let chunk_size = data.chunk_size.unwrap_or(DEFAULT_CHUNK_SIZE);
 
         if chunk_size > DEFAULT_CHUNK_SIZE || chunk_size < 1 {
@@ -131,48 +159,28 @@ impl StorageData {
             (data.file_size + chunk_size - 1) / chunk_size
         };
 
-        // Bound chunk-vector pre-allocation regardless of chunk_size choice.
         if num_chunks > MAX_CHUNKS_PER_FILE {
             return Err(init_upload::InitUploadError::TooManyChunks);
         }
 
-        let metadata: InternalRawStorageMetadata = InternalRawStorageMetadata {
+        let metadata = InternalRawStorageMetadata {
             file_path: path.clone(),
             file_hash: data.file_hash,
             file_size: data.file_size,
             received_size: 0,
             chunks_size: chunk_size,
             chunks: vec![vec![]; num_chunks as usize],
-            state: UploadState::Init,
+            state: if is_reupload {
+                UploadState::ReuploadInit
+            } else {
+                UploadState::Init
+            },
             init_timestamp: ic_cdk::api::time(),
         };
 
         self.storage_raw_internal_metadata.insert(path, metadata);
 
         Ok(init_upload::InitUploadResp {})
-    }
-
-    /// Sweep abandoned uploads: any entry still in `Init` or `InProgress` whose
-    /// `init_timestamp` is older than `ttl_nanos` is removed. Returns the number
-    /// of entries removed. Cheap to run (single iteration); intended for an
-    /// hourly heartbeat.
-    pub fn gc_abandoned_uploads(&mut self, now: u64, ttl_nanos: u64) -> usize {
-        let cutoff = now.saturating_sub(ttl_nanos);
-        let stale: Vec<String> = self
-            .storage_raw_internal_metadata
-            .iter()
-            .filter_map(|(path, m)| match m.state {
-                UploadState::Finalized => None,
-                _ if m.init_timestamp <= cutoff => Some(path.clone()),
-                _ => None,
-            })
-            .collect();
-        let n = stale.len();
-        for path in stale {
-            trace(&format!("gc_abandoned_uploads: removing {path}"));
-            self.storage_raw_internal_metadata.remove(&path);
-        }
-        n
     }
 
     pub fn store_chunk(
@@ -184,19 +192,27 @@ impl StorageData {
         validate_file_path(&data.file_path)
             .map_err(|_| store_chunk::StoreChunkError::InvalidFilePath)?;
 
-        let path = if data.file_path.starts_with('/') {
+        let mut path = if data.file_path.starts_with('/') {
             data.file_path[1..].to_string()
         } else {
             data.file_path
         };
 
+        // Remove the prefix if present so it resolves to the active metadata slot
+        if path.contains(REUPLOAD_PREFIX) {
+            path = path.replace(REUPLOAD_PREFIX, "");
+        }
+
         let metadata = self
             .storage_raw_internal_metadata
-            .get_mut(&path.clone())
+            .get_mut(&path)
             .ok_or(store_chunk::StoreChunkError::UploadNotInitialized)?;
 
         match metadata.state {
             UploadState::Init => {
+                metadata.state = UploadState::InProgress;
+            }
+            UploadState::ReuploadInit => {
                 metadata.state = UploadState::InProgress;
             }
             UploadState::InProgress => (),
@@ -237,19 +253,28 @@ impl StorageData {
         validate_file_path(&data.file_path)
             .map_err(|_| finalize_upload::FinalizeUploadError::InvalidFilePath)?;
 
-        let path = if data.file_path.starts_with('/') {
+        let mut path = if data.file_path.starts_with('/') {
             data.file_path[1..].to_string()
         } else {
             data.file_path
         };
 
+        if path.contains(REUPLOAD_PREFIX) {
+            path = path.replace(REUPLOAD_PREFIX, "");
+        }
+
         let mut metadata = self
             .storage_raw_internal_metadata
-            .remove(&path.clone())
+            .remove(&path)
             .ok_or(finalize_upload::FinalizeUploadError::UploadNotStarted)?;
 
         match metadata.state {
             UploadState::Init => {
+                self.storage_raw_internal_metadata
+                    .insert(path.clone(), metadata);
+                return Err(finalize_upload::FinalizeUploadError::UploadNotStarted);
+            }
+            UploadState::ReuploadInit => {
                 self.storage_raw_internal_metadata
                     .insert(path.clone(), metadata);
                 return Err(finalize_upload::FinalizeUploadError::UploadNotStarted);
@@ -287,14 +312,19 @@ impl StorageData {
 
         metadata.state = UploadState::Finalized;
 
-        // Insert raw bytes BEFORE re-inserting metadata. If a future panic ever lands
-        // between these two writes, the next call sees metadata absent rather than
-        // a Finalized metadata pointing at non-existent bytes.
+        // CRITICAL CACHE CLEANUP: If this file was previously certified and cached,
+        // we must clear the old asset out of the certification tree since the bytes changed.
+        if self.certified_assets.contains(&path) {
+            if let Some(old_data) = self.storage_raw.get(&path) {
+                uncertify_asset(vec![Asset::new(path.clone(), old_data)]);
+            }
+            self.certified_assets.retain(|asset| asset != &path);
+        }
+
+        // Overwrite the raw bytes and re-insert finalized metadata
         self.storage_raw.insert(path.clone(), file_data);
         self.storage_raw_internal_metadata
             .insert(path.clone(), metadata);
-
-        // certify_asset(vec![Asset::new(metadata.file_path, file_data)]);
 
         trace(&format!("finalize_upload - file_path: {:?}", path));
 
@@ -302,9 +332,32 @@ impl StorageData {
             url: format!(
                 "https://{}.raw.icp0.io/{}",
                 ic_cdk::api::canister_self().to_string(),
-                path.clone()
+                path
             ),
         })
+    }
+
+    /// Sweep abandoned uploads: any entry still in `Init` or `InProgress` whose
+    /// `init_timestamp` is older than `ttl_nanos` is removed. Returns the number
+    /// of entries removed. Cheap to run (single iteration); intended for an
+    /// hourly heartbeat.
+    pub fn gc_abandoned_uploads(&mut self, now: u64, ttl_nanos: u64) -> usize {
+        let cutoff = now.saturating_sub(ttl_nanos);
+        let stale: Vec<String> = self
+            .storage_raw_internal_metadata
+            .iter()
+            .filter_map(|(path, m)| match m.state {
+                UploadState::Finalized => None,
+                _ if m.init_timestamp <= cutoff => Some(path.clone()),
+                _ => None,
+            })
+            .collect();
+        let n = stale.len();
+        for path in stale {
+            trace(&format!("gc_abandoned_uploads: removing {path}"));
+            self.storage_raw_internal_metadata.remove(&path);
+        }
+        n
     }
 
     pub fn get_file_data(&self, path: &str) -> Option<(Vec<u8>, &'static str)> {
@@ -394,14 +447,9 @@ impl StorageData {
 
         let file_size = metadata.file_size as u64;
 
-        let file_data = self
-            .storage_raw
-            .get(&path)
-            .ok_or_else(|| {
-                format!(
-                    "cache_miss: metadata marked Finalized but raw bytes missing for {path}"
-                )
-            })?;
+        let file_data = self.storage_raw.get(&path).ok_or_else(|| {
+            format!("cache_miss: metadata marked Finalized but raw bytes missing for {path}")
+        })?;
 
         if free_heap_size < file_size {
             trace(&format!(
