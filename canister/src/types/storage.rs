@@ -102,16 +102,15 @@ impl StorageData {
         validate_file_path(&data.file_path)
             .map_err(|_| init_upload::InitUploadError::InvalidFilePath)?;
 
-        let mut path = if data.file_path.starts_with('/') {
-            data.file_path[1..].to_string()
-        } else {
-            data.file_path
-        };
-
+        let mut path = data.file_path.clone();
         let is_reupload = path.contains(REUPLOAD_PREFIX);
+
         if is_reupload {
             path = path.replace(REUPLOAD_PREFIX, "");
         }
+
+        // Normalize to canonical form (no leading slashes)
+        let path = path.trim_start_matches('/').to_string();
 
         // Bound the total number of files to keep metadata heap usage predictable.
         if self.storage_raw_internal_metadata.len() >= MAX_FILES_PER_CANISTER {
@@ -192,16 +191,13 @@ impl StorageData {
         validate_file_path(&data.file_path)
             .map_err(|_| store_chunk::StoreChunkError::InvalidFilePath)?;
 
-        let mut path = if data.file_path.starts_with('/') {
-            data.file_path[1..].to_string()
-        } else {
-            data.file_path
-        };
+        let mut path = data.file_path.clone();
 
-        // Remove the prefix if present so it resolves to the active metadata slot
         if path.contains(REUPLOAD_PREFIX) {
             path = path.replace(REUPLOAD_PREFIX, "");
         }
+
+        let path = path.trim_start_matches('/').to_string();
 
         let metadata = self
             .storage_raw_internal_metadata
@@ -253,15 +249,13 @@ impl StorageData {
         validate_file_path(&data.file_path)
             .map_err(|_| finalize_upload::FinalizeUploadError::InvalidFilePath)?;
 
-        let mut path = if data.file_path.starts_with('/') {
-            data.file_path[1..].to_string()
-        } else {
-            data.file_path
-        };
+        let mut path = data.file_path.clone();
 
         if path.contains(REUPLOAD_PREFIX) {
             path = path.replace(REUPLOAD_PREFIX, "");
         }
+
+        let path = path.trim_start_matches('/').to_string();
 
         let mut metadata = self
             .storage_raw_internal_metadata
@@ -397,11 +391,13 @@ impl StorageData {
         validate_file_path(&file_path)
             .map_err(|_| cancel_upload::CancelUploadError::InvalidFilePath)?;
 
-        let path = if file_path.starts_with('/') {
-            file_path[1..].to_string()
-        } else {
-            file_path
-        };
+        let mut path = file_path;
+
+        if path.contains(REUPLOAD_PREFIX) {
+            path = path.replace(REUPLOAD_PREFIX, "");
+        }
+
+        let path = path.trim_start_matches('/').to_string();
 
         // Peek state before removing so we don't delete a finalized file by mistake.
         match self.storage_raw_internal_metadata.get(&path) {
@@ -419,11 +415,7 @@ impl StorageData {
     pub fn cache_miss(&mut self, env: &CanisterEnv, path: String) -> Result<(), String> {
         trace(&format!("cache_miss: {:?}", path));
 
-        let path = if path.starts_with('/') {
-            path[1..].to_string()
-        } else {
-            path
-        };
+        let path = path.trim_start_matches('/').to_string();
 
         let free_heap_size = self.get_free_heap_size_bytes(env);
 
