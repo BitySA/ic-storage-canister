@@ -5,8 +5,15 @@ type Args_1 = record {
   file_size : nat64;
   chunk_size : opt nat64;
 };
-type Args_2 = record { chunk_id : nat; file_path : text; chunk_data : blob };
-type Args_3 = variant { Upgrade : UpgradeArgs; Init : InitArgs };
+type Args_2 = record {
+  file_hash : text;
+  file_path : text;
+  file_size : nat64;
+  chunk_size : opt nat64;
+};
+type Args_3 = record { file_path : text };
+type Args_4 = record { chunk_id : nat; file_path : text; chunk_data : blob };
+type Args_5 = variant { Upgrade : UpgradeArgs; Init : InitArgs };
 type BuildVersion = record { major : nat32; minor : nat32; patch : nat32 };
 type CancelUploadError = variant {
   InvalidFilePath;
@@ -28,6 +35,15 @@ type InitArgs = record {
   version : BuildVersion;
   commit_hash : text;
 };
+type InitReuploadError = variant {
+  InvalidFilePath;
+  TooManyChunks;
+  NotEnoughStorage;
+  FileSizeMismatch;
+  FileNotFound;
+  TooManyFiles;
+  InvalidChunkSize;
+};
 type InitUploadError = variant {
   InvalidFilePath;
   TooManyChunks;
@@ -36,10 +52,13 @@ type InitUploadError = variant {
   TooManyFiles;
   InvalidChunkSize;
 };
+type RemoveFileError = variant { InvalidFilePath; UploadNotInitialized };
 type Result = variant { Ok : record {}; Err : CancelUploadError };
 type Result_1 = variant { Ok : FinalizeUploadResp; Err : FinalizeUploadError };
-type Result_2 = variant { Ok : record {}; Err : InitUploadError };
-type Result_3 = variant { Ok : record {}; Err : StoreChunkError };
+type Result_2 = variant { Ok : record {}; Err : InitReuploadError };
+type Result_3 = variant { Ok : record {}; Err : InitUploadError };
+type Result_4 = variant { Ok : record {}; Err : RemoveFileError };
+type Result_5 = variant { Ok : record {}; Err : StoreChunkError };
 type StoreChunkError = variant {
   InvalidFileHash;
   InvalidFilePath;
@@ -51,10 +70,13 @@ type StoreChunkError = variant {
   UploadAlreadyFinalized;
 };
 type UpgradeArgs = record { version : BuildVersion; commit_hash : text };
-service : (Args_3) -> {
+service : (Args_5) -> {
   cancel_upload : (Args) -> (Result);
   finalize_upload : (Args) -> (Result_1);
+  get_memory : (null) -> (nat64) query;
   get_storage_size : (null) -> (nat) query;
-  init_upload : (Args_1) -> (Result_2);
-  store_chunk : (Args_2) -> (Result_3);
+  init_reupload : (Args_1) -> (Result_2);
+  init_upload : (Args_2) -> (Result_3);
+  remove_file : (Args_3) -> (Result_4);
+  store_chunk : (Args_4) -> (Result_5);
 }

@@ -6,6 +6,8 @@ use super::http::{certify_asset, uncertify_asset};
 use crate::memory::get_data_storage_memory;
 use crate::memory::VM;
 use crate::utils::{get_content_type_for_path, trace, validate_file_path};
+use bity_ic_storage_canister_api::init_reupload;
+use bity_ic_storage_canister_api::remove_file;
 use bity_ic_utils::env::CanisterEnv;
 use hex;
 use ic_cdk::stable::{stable_size, WASM_PAGE_SIZE_IN_BYTES};
@@ -13,8 +15,6 @@ use ic_stable_structures::StableBTreeMap;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-
-const REUPLOAD_PREFIX: &str = "__reupload__:";
 
 const DEFAULT_CHUNK_SIZE: u64 = 1 * 1024 * 1024;
 
@@ -90,6 +90,13 @@ impl StorageData {
         ));
         free_storage_size
     }
+
+    pub fn get_memory(&self) -> u64 {
+        self.storage_raw_internal_metadata
+            .values()
+            .map(|m| m.file_size)
+            .sum()
+    }
 }
 
 impl StorageData {
@@ -102,15 +109,8 @@ impl StorageData {
         validate_file_path(&data.file_path)
             .map_err(|_| init_upload::InitUploadError::InvalidFilePath)?;
 
-        let mut path = data.file_path.clone();
-        let is_reupload = path.contains(REUPLOAD_PREFIX);
-
-        if is_reupload {
-            path = path.replace(REUPLOAD_PREFIX, "");
-        }
-
         // Normalize to canonical form (no leading slashes)
-        let path = path.trim_start_matches('/').to_string();
+        let path = data.file_path.trim_start_matches('/').to_string();
 
         // Bound the total number of files to keep metadata heap usage predictable.
         if self.storage_raw_internal_metadata.len() >= MAX_FILES_PER_CANISTER {
@@ -120,30 +120,14 @@ impl StorageData {
         // Check if the file already exists
         let existing_metadata = self.storage_raw_internal_metadata.get(&path);
 
-        if is_reupload {
-            match existing_metadata {
-                None => {
-                    // Re-upload requires the file to exist
-                    return Err(init_upload::InitUploadError::InvalidFilePath);
-                }
-                Some(meta) => {
-                    // --- FILE SIZE VALIDATION FOR RE-UPLOADS ---
-                    if meta.file_size != data.file_size {
-                        return Err(init_upload::InitUploadError::InvalidFilePath);
-                        // Note: If init_upload::InitUploadError has a size mismatch variant, use it here.
-                    }
-                }
-            }
-        } else {
-            if existing_metadata.is_some() {
-                return Err(init_upload::InitUploadError::FileAlreadyExists);
-            }
+        if existing_metadata.is_some() {
+            return Err(init_upload::InitUploadError::FileAlreadyExists);
+        }
 
-            // Standard storage check only necessary for clean uploads,
-            // since a re-upload keeps the file size identical and won't consume new permanent space.
-            if self.get_free_storage_size_bytes() < (data.file_size as u128) {
-                return Err(init_upload::InitUploadError::NotEnoughStorage);
-            }
+        // Standard storage check only necessary for clean uploads,
+        // since a re-upload keeps the file size identical and won't consume new permanent space.
+        if self.get_free_storage_size_bytes() < (data.file_size as u128) {
+            return Err(init_upload::InitUploadError::NotEnoughStorage);
         }
 
         let chunk_size = data.chunk_size.unwrap_or(DEFAULT_CHUNK_SIZE);
@@ -169,17 +153,66 @@ impl StorageData {
             received_size: 0,
             chunks_size: chunk_size,
             chunks: vec![vec![]; num_chunks as usize],
-            state: if is_reupload {
-                UploadState::ReuploadInit
-            } else {
-                UploadState::Init
-            },
+            state: UploadState::Init,
             init_timestamp: ic_cdk::api::time(),
         };
 
         self.storage_raw_internal_metadata.insert(path, metadata);
 
         Ok(init_upload::InitUploadResp {})
+    }
+
+    pub fn init_reupload(
+        &mut self,
+        data: init_reupload::Args,
+    ) -> Result<init_reupload::InitReuploadResp, init_reupload::InitReuploadError> {
+        trace(&format!("init_reupload - file_path: {:?}", data.file_path));
+
+        validate_file_path(&data.file_path)
+            .map_err(|_| init_reupload::InitReuploadError::InvalidFilePath)?;
+
+        let path = data.file_path.trim_start_matches('/').to_string();
+
+        let existing_metadata = self
+            .storage_raw_internal_metadata
+            .get(&path)
+            .ok_or(init_reupload::InitReuploadError::FileNotFound)?;
+
+        if existing_metadata.file_size != data.file_size {
+            return Err(init_reupload::InitReuploadError::FileSizeMismatch);
+        }
+
+        let chunk_size = data.chunk_size.unwrap_or(DEFAULT_CHUNK_SIZE);
+
+        if chunk_size == 0 || chunk_size > DEFAULT_CHUNK_SIZE {
+            return Err(init_reupload::InitReuploadError::InvalidChunkSize);
+        }
+
+        let num_chunks = if data.file_size == 0 {
+            0
+        } else {
+            (data.file_size + chunk_size - 1) / chunk_size
+        };
+
+        if num_chunks > MAX_CHUNKS_PER_FILE {
+            return Err(init_reupload::InitReuploadError::TooManyChunks);
+        }
+
+        self.storage_raw_internal_metadata.insert(
+            path.clone(),
+            InternalRawStorageMetadata {
+                file_path: path,
+                file_hash: data.file_hash,
+                file_size: data.file_size,
+                received_size: 0,
+                chunks_size: chunk_size,
+                chunks: vec![vec![]; num_chunks as usize],
+                state: UploadState::ReuploadInit,
+                init_timestamp: ic_cdk::api::time(),
+            },
+        );
+
+        Ok(init_reupload::InitReuploadResp {})
     }
 
     pub fn store_chunk(
@@ -191,13 +224,7 @@ impl StorageData {
         validate_file_path(&data.file_path)
             .map_err(|_| store_chunk::StoreChunkError::InvalidFilePath)?;
 
-        let mut path = data.file_path.clone();
-
-        if path.contains(REUPLOAD_PREFIX) {
-            path = path.replace(REUPLOAD_PREFIX, "");
-        }
-
-        let path = path.trim_start_matches('/').to_string();
+        let path = data.file_path.trim_start_matches('/').to_string();
 
         let metadata = self
             .storage_raw_internal_metadata
@@ -249,13 +276,7 @@ impl StorageData {
         validate_file_path(&data.file_path)
             .map_err(|_| finalize_upload::FinalizeUploadError::InvalidFilePath)?;
 
-        let mut path = data.file_path.clone();
-
-        if path.contains(REUPLOAD_PREFIX) {
-            path = path.replace(REUPLOAD_PREFIX, "");
-        }
-
-        let path = path.trim_start_matches('/').to_string();
+        let path = data.file_path.trim_start_matches('/').to_string();
 
         let mut metadata = self
             .storage_raw_internal_metadata
@@ -391,13 +412,7 @@ impl StorageData {
         validate_file_path(&file_path)
             .map_err(|_| cancel_upload::CancelUploadError::InvalidFilePath)?;
 
-        let mut path = file_path;
-
-        if path.contains(REUPLOAD_PREFIX) {
-            path = path.replace(REUPLOAD_PREFIX, "");
-        }
-
-        let path = path.trim_start_matches('/').to_string();
+        let path = file_path.trim_start_matches('/').to_string();
 
         // Peek state before removing so we don't delete a finalized file by mistake.
         match self.storage_raw_internal_metadata.get(&path) {
@@ -410,6 +425,40 @@ impl StorageData {
 
         self.storage_raw_internal_metadata.remove(&path);
         Ok(cancel_upload::CancelUploadResp {})
+    }
+
+    pub fn remove_file(
+        &mut self,
+        file_path: String,
+    ) -> Result<remove_file::RemoveFileResp, remove_file::RemoveFileError> {
+        validate_file_path(&file_path)
+            .map_err(|_| remove_file::RemoveFileError::InvalidFilePath)?;
+
+        let path = file_path.trim_start_matches('/').to_string();
+
+        let metadata = self
+            .storage_raw_internal_metadata
+            .remove(&path)
+            .ok_or(remove_file::RemoveFileError::UploadNotInitialized)?;
+
+        // Remove certified asset if present
+        if self.certified_assets.contains(&path) {
+            if let Some(data) = self.storage_raw.get(&path) {
+                uncertify_asset(vec![Asset::new(path.clone(), data)]);
+            }
+
+            self.certified_assets.retain(|asset| asset != &path);
+        }
+
+        // Remove raw bytes
+        self.storage_raw.remove(&path);
+
+        trace(&format!(
+            "remove_file: removed {} ({}) bytes",
+            path, metadata.file_size
+        ));
+
+        Ok(remove_file::RemoveFileResp {})
     }
 
     pub fn cache_miss(&mut self, env: &CanisterEnv, path: String) -> Result<(), String> {

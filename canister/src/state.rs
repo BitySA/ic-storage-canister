@@ -1,6 +1,8 @@
 use crate::types::storage;
 use bity_ic_canister_state_macros::canister_state;
-use bity_ic_storage_canister_api::{cancel_upload, finalize_upload, init_upload, store_chunk};
+use bity_ic_storage_canister_api::{
+    cancel_upload, finalize_upload, init_reupload, init_upload, remove_file, store_chunk,
+};
 use bity_ic_types::BuildVersion;
 use bity_ic_types::{Cycles, TimestampMillis};
 use bity_ic_utils::env::{CanisterEnv, Environment};
@@ -66,6 +68,13 @@ impl Data {
         self.storage.init_upload(data)
     }
 
+    pub fn init_reupload(
+        &mut self,
+        data: init_reupload::Args,
+    ) -> Result<init_reupload::InitReuploadResp, init_reupload::InitReuploadError> {
+        self.storage.init_reupload(data)
+    }
+
     pub fn store_chunk(
         &mut self,
         data: store_chunk::Args,
@@ -85,6 +94,13 @@ impl Data {
         media_hash_id: String,
     ) -> Result<cancel_upload::CancelUploadResp, cancel_upload::CancelUploadError> {
         self.storage.cancel_upload(media_hash_id)
+    }
+
+    pub fn remove_file(
+        &mut self,
+        media_hash_id: String,
+    ) -> Result<remove_file::RemoveFileResp, remove_file::RemoveFileError> {
+        self.storage.remove_file(media_hash_id)
     }
 }
 
