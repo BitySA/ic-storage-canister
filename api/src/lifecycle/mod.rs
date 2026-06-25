@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::init::InitArgs;
 use crate::post_upgrade::UpgradeArgs;
 
-#[derive(CandidType, Serialize, Deserialize, Debug)]
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub enum Args {
     Init(InitArgs),
     Upgrade(UpgradeArgs),

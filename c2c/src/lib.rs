@@ -3,7 +3,9 @@ use bity_ic_storage_canister_api::finalize_upload;
 use bity_ic_storage_canister_api::get_storage_size::{
     Args as GetStorageSizeArgs, Response as GetStorageSizeResponse,
 };
+use bity_ic_storage_canister_api::init_reupload;
 use bity_ic_storage_canister_api::init_upload;
+use bity_ic_storage_canister_api::remove_file;
 use bity_ic_storage_canister_api::store_chunk;
 
 pub mod get_storage_size {
@@ -37,6 +39,20 @@ pub async fn init_upload(
 
     response
         .candid::<init_upload::Response>()
+        .map_err(|e| format!("Failed to decode response: {:?}", e))
+}
+
+pub async fn init_reupload(
+    canister_id: candid::Principal,
+    args: init_reupload::Args,
+) -> Result<init_reupload::Response, String> {
+    let response = ic_cdk::call::Call::unbounded_wait(canister_id, "init_reupload")
+        .with_arg(args)
+        .await
+        .map_err(|e| format!("Call failed: {:?}", e))?;
+
+    response
+        .candid::<init_reupload::Response>()
         .map_err(|e| format!("Failed to decode response: {:?}", e))
 }
 
@@ -79,5 +95,19 @@ pub async fn cancel_upload(
 
     response
         .candid::<cancel_upload::Response>()
+        .map_err(|e| format!("Failed to decode response: {:?}", e))
+}
+
+pub async fn remove_file(
+    canister_id: candid::Principal,
+    args: remove_file::Args,
+) -> Result<remove_file::Response, String> {
+    let response = ic_cdk::call::Call::unbounded_wait(canister_id, "remove_file")
+        .with_arg(args)
+        .await
+        .map_err(|e| format!("Call failed: {:?}", e))?;
+
+    response
+        .candid::<remove_file::Response>()
         .map_err(|e| format!("Failed to decode response: {:?}", e))
 }
