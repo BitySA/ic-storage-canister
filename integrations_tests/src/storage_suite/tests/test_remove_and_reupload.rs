@@ -1,7 +1,8 @@
 use crate::client::storage::get_storage_size;
 use crate::client::storage::{
-    finalize_upload, get_memory, http_request, init_reupload, init_upload, remove_file, store_chunk,
+    cancel_upload, finalize_upload, get_memory, http_request, init_reupload, init_upload, remove_file, store_chunk,
 };
+use bity_ic_storage_canister_api::cancel_upload;
 use bity_ic_storage_canister_api::updates::{
     finalize_upload, init_reupload, init_upload, remove_file, store_chunk,
 };
@@ -344,4 +345,128 @@ fn test_remove_file_and_upload_another() {
         "Stable Memory usage should stay the same after uploading a new file. After new upload: {}, Before new upload: {}",
         stable_memory_after_remove, stable_memory_after_new_upload
     );
+}
+
+#[test]
+fn test_reupload_caching() {
+    let mut test_env: TestEnv = default_test_setup();
+    let TestEnv {
+        ref mut pic,
+        storage_canister_id,
+        controller,
+        ..
+    } = test_env;
+
+    let upload_path = "/cache_test.txt";
+    let original_content = b"Original Content".to_vec();
+
+    // 1. Upload original file
+    upload_custom_file(
+        pic,
+        controller,
+        storage_canister_id,
+        upload_path,
+        &original_content,
+    );
+
+    // Verify original file is accessible
+    let req1 = HttpRequest::get(upload_path)
+        .with_headers(vec![(
+            "host".to_string(),
+            format!("{}.raw.icp0.io", storage_canister_id),
+        )])
+        .build();
+    let resp1 = http_request(pic, controller, storage_canister_id, &req1);
+    assert_eq!(resp1.status_code(), StatusCode::OK);
+    assert_eq!(resp1.body(), &original_content);
+
+    // 2. Start reupload with modified content hash but same size
+    let modified_content = b"Modified Content".to_vec();
+    assert_eq!(original_content.len(), modified_content.len());
+
+    let mut hasher = Sha256::new();
+    hasher.update(&modified_content);
+    let modified_hash = format!("{:x}", hasher.finalize());
+
+    let reupload_resp = init_reupload(
+        pic,
+        controller,
+        storage_canister_id,
+        &(init_reupload::Args {
+            file_path: upload_path.to_string(),
+            file_hash: modified_hash.clone(),
+            file_size: modified_content.len() as u64,
+            chunk_size: None,
+        }),
+    );
+    assert!(reupload_resp.is_ok());
+
+    // 3. Verify original file is STILL accessible (caching: in-progress reupload doesn't hide it)
+    let resp2 = http_request(pic, controller, storage_canister_id, &req1);
+    assert_eq!(resp2.status_code(), StatusCode::OK);
+    assert_eq!(resp2.body(), &original_content);
+
+    // 4. Cancel the reupload
+    let cancel_resp = cancel_upload(
+        pic,
+        controller,
+        storage_canister_id,
+        &(cancel_upload::Args {
+            file_path: upload_path.to_string(),
+        }),
+    );
+    assert!(cancel_resp.is_ok());
+
+    // Verify original file is STILL accessible after cancel
+    let resp3 = http_request(pic, controller, storage_canister_id, &req1);
+    assert_eq!(resp3.status_code(), StatusCode::OK);
+    assert_eq!(resp3.body(), &original_content);
+
+    // 5. Start reupload again
+    let reupload_resp2 = init_reupload(
+        pic,
+        controller,
+        storage_canister_id,
+        &(init_reupload::Args {
+            file_path: upload_path.to_string(),
+            file_hash: modified_hash,
+            file_size: modified_content.len() as u64,
+            chunk_size: None,
+        }),
+    );
+    assert!(reupload_resp2.is_ok());
+
+    // 6. Store a chunk
+    store_chunk(
+        pic,
+        controller,
+        storage_canister_id,
+        &(store_chunk::Args {
+            file_path: upload_path.to_string(),
+            chunk_id: Nat::from(0u64),
+            chunk_data: modified_content.clone(),
+        }),
+    )
+    .expect("store_chunk for reupload failed");
+
+    // Verify original file is STILL accessible (reupload in progress with chunks)
+    let resp4 = http_request(pic, controller, storage_canister_id, &req1);
+    assert_eq!(resp4.status_code(), StatusCode::OK);
+    assert_eq!(resp4.body(), &original_content);
+
+    // 7. Finalize reupload
+    finalize_upload(
+        pic,
+        controller,
+        storage_canister_id,
+        &(finalize_upload::Args {
+            file_path: upload_path.to_string(),
+        }),
+    )
+    .expect("finalize_upload for reupload failed");
+
+    // 8. Verify the file has updated to modified content
+    let resp5 = http_request(pic, controller, storage_canister_id, &req1);
+    assert_eq!(resp5.status_code(), StatusCode::OK);
+    assert_eq!(resp5.body(), &modified_content);
 }

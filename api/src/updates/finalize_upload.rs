@@ -15,6 +15,7 @@ pub type Response = Result<FinalizeUploadResp, FinalizeUploadError>;
 
 #[derive(Serialize, Deserialize, CandidType, Debug)]
 pub enum FinalizeUploadError {
+    InvalidStateTransition,
     UploadNotStarted,
     UploadAlreadyFinalized,
     IncompleteUpload,

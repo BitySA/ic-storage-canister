@@ -16,6 +16,7 @@ pub type Response = Result<InitUploadResp, InitUploadError>;
 
 #[derive(Serialize, Deserialize, CandidType, Debug)]
 pub enum InitUploadError {
+    ConcurrentManagementCall,
     FileAlreadyExists,
     NotEnoughStorage,
     InvalidChunkSize,

@@ -7,4 +7,7 @@ pub enum UploadState {
     ReuploadInit,
     InProgress,
     Finalized,
+    InitReupload,
+    ChunkReupload,
+    FinalizeReupload,
 }
