@@ -11,7 +11,7 @@ resolver = "2"
 # inherit this via `version.workspace = true`, so a release bumps them in lockstep.
 # (integration_tests keeps its own version: it is a private test crate, never published.)
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 
 [profile.release]
