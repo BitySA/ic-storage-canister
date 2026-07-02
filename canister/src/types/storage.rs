@@ -91,7 +91,7 @@ impl StorageData {
         free_storage_size
     }
 
-    pub fn get_memory(&self) -> u64 {
+    pub fn get_stored_files_size_bytes(&self) -> u64 {
         self.storage_raw_internal_metadata
             .values()
             .map(|m| m.file_size)
@@ -233,7 +233,10 @@ impl StorageData {
         let path = data.file_path.trim_start_matches('/').to_string();
         let reupload_key = format!("?reupload:{}", path);
 
-        let metadata = if self.storage_raw_internal_metadata.contains_key(&reupload_key) {
+        let metadata = if self
+            .storage_raw_internal_metadata
+            .contains_key(&reupload_key)
+        {
             self.storage_raw_internal_metadata
                 .get_mut(&reupload_key)
                 .unwrap()
@@ -298,9 +301,13 @@ impl StorageData {
         let path = data.file_path.trim_start_matches('/').to_string();
         let reupload_key = format!("?reupload:{}", path);
 
-        let is_reupload = self.storage_raw_internal_metadata.contains_key(&reupload_key);
+        let is_reupload = self
+            .storage_raw_internal_metadata
+            .contains_key(&reupload_key);
         let mut metadata = if is_reupload {
-            self.storage_raw_internal_metadata.remove(&reupload_key).unwrap()
+            self.storage_raw_internal_metadata
+                .remove(&reupload_key)
+                .unwrap()
         } else {
             self.storage_raw_internal_metadata
                 .remove(&path)
@@ -450,7 +457,10 @@ impl StorageData {
         let path = file_path.trim_start_matches('/').to_string();
         let reupload_key = format!("?reupload:{}", path);
 
-        if self.storage_raw_internal_metadata.contains_key(&reupload_key) {
+        if self
+            .storage_raw_internal_metadata
+            .contains_key(&reupload_key)
+        {
             self.storage_raw_internal_metadata.remove(&reupload_key);
             return Ok(cancel_upload::CancelUploadResp {});
         }

@@ -1,6 +1,7 @@
 use crate::client::storage::get_storage_size;
 use crate::client::storage::{
-    cancel_upload, finalize_upload, get_memory, http_request, init_reupload, init_upload, remove_file, store_chunk,
+    cancel_upload, finalize_upload, get_stored_files_size_bytes, http_request, init_reupload,
+    init_upload, remove_file, store_chunk,
 };
 use bity_ic_storage_canister_api::cancel_upload;
 use bity_ic_storage_canister_api::updates::{
@@ -204,14 +205,15 @@ fn test_remove_file() {
     }
 
     // 2. Get initial memory usage
-    let initial_memory = get_memory(pic, controller, storage_canister_id, &());
+    let initial_memory = get_stored_files_size_bytes(pic, controller, storage_canister_id, &());
 
     // 3. Create the file (1000 bytes)
     let content = vec![65u8; 1000];
     upload_custom_file(pic, controller, storage_canister_id, upload_path, &content);
 
     // 4. Verify memory usage increased
-    let memory_after_upload = get_memory(pic, controller, storage_canister_id, &());
+    let memory_after_upload =
+        get_stored_files_size_bytes(pic, controller, storage_canister_id, &());
     assert!(
         memory_after_upload > initial_memory,
         "Memory usage should increase after uploading a file. Before: {}, After: {}",
@@ -231,7 +233,8 @@ fn test_remove_file() {
     assert!(remove_resp.is_ok(), "remove_file failed");
 
     // 6. Verify memory usage is lower than after upload
-    let memory_after_remove = get_memory(pic, controller, storage_canister_id, &());
+    let memory_after_remove =
+        get_stored_files_size_bytes(pic, controller, storage_canister_id, &());
     assert!(
         memory_after_remove < memory_after_upload,
         "Memory usage should decrease after removing a file. Before remove: {}, After remove: {}",
@@ -267,7 +270,7 @@ fn test_remove_file_and_upload_another() {
     let upload_path_1 = "/remove_test.txt";
 
     // 2. Get initial memory usage
-    let initial_memory = get_memory(pic, controller, storage_canister_id, &());
+    let initial_memory = get_stored_files_size_bytes(pic, controller, storage_canister_id, &());
 
     // 3. Create the file (1000 bytes)
     let content_1 = vec![65u8; 1000];
@@ -280,7 +283,8 @@ fn test_remove_file_and_upload_another() {
     );
 
     // 4. Verify memory usage increased
-    let memory_after_upload = get_memory(pic, controller, storage_canister_id, &());
+    let memory_after_upload =
+        get_stored_files_size_bytes(pic, controller, storage_canister_id, &());
     let stable_memory_after_upload = get_storage_size(pic, controller, storage_canister_id, &());
     assert!(
         memory_after_upload > initial_memory,
@@ -301,7 +305,8 @@ fn test_remove_file_and_upload_another() {
     assert!(remove_resp.is_ok(), "remove_file failed");
 
     // 6. Verify memory usage is lower than after upload
-    let memory_after_remove = get_memory(pic, controller, storage_canister_id, &());
+    let memory_after_remove =
+        get_stored_files_size_bytes(pic, controller, storage_canister_id, &());
     let stable_memory_after_remove = get_storage_size(pic, controller, storage_canister_id, &());
     assert!(
         memory_after_remove < memory_after_upload,
@@ -331,7 +336,8 @@ fn test_remove_file_and_upload_another() {
         &content_2,
     );
 
-    let memory_after_new_upload = get_memory(pic, controller, storage_canister_id, &());
+    let memory_after_new_upload =
+        get_stored_files_size_bytes(pic, controller, storage_canister_id, &());
     let stable_memory_after_new_upload =
         get_storage_size(pic, controller, storage_canister_id, &());
     assert!(

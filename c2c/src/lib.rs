@@ -1,18 +1,11 @@
 use bity_ic_storage_canister_api::cancel_upload;
 use bity_ic_storage_canister_api::finalize_upload;
-use bity_ic_storage_canister_api::get_storage_size::{
-    Args as GetStorageSizeArgs, Response as GetStorageSizeResponse,
-};
+use bity_ic_storage_canister_api::get_storage_size;
+use bity_ic_storage_canister_api::get_stored_files_size_bytes;
 use bity_ic_storage_canister_api::init_reupload;
 use bity_ic_storage_canister_api::init_upload;
 use bity_ic_storage_canister_api::remove_file;
 use bity_ic_storage_canister_api::store_chunk;
-
-pub mod get_storage_size {
-    use super::*;
-    pub type Args = GetStorageSizeArgs;
-    pub type Response = GetStorageSizeResponse;
-}
 
 pub async fn get_storage_size(
     canister_id: candid::Principal,
@@ -25,6 +18,20 @@ pub async fn get_storage_size(
 
     response
         .candid::<get_storage_size::Response>()
+        .map_err(|e| format!("Failed to decode response: {:?}", e))
+}
+
+pub async fn get_stored_files_size_bytes(
+    canister_id: candid::Principal,
+    args: get_stored_files_size_bytes::Args,
+) -> Result<get_stored_files_size_bytes::Response, String> {
+    let response = ic_cdk::call::Call::unbounded_wait(canister_id, "get_stored_files_size_bytes")
+        .with_arg(args)
+        .await
+        .map_err(|e| format!("Call failed: {:?}", e))?;
+
+    response
+        .candid::<get_stored_files_size_bytes::Response>()
         .map_err(|e| format!("Failed to decode response: {:?}", e))
 }
 
