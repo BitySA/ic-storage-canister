@@ -72,7 +72,7 @@ url = "2.5.8"
 # ends up in the published c2c manifest, so `cargo publish` works once api is on crates.io.
 # The version must track [workspace.package].version on each release (cargo cannot
 # inherit workspace.package.version into a dependency entry).
-bity-ic-storage-canister-api    = { path = "api", version = "0.4.0" }
+bity-ic-storage-canister-api    = { path = "api", version = "0.5.0" }
 
 bity-ic-canister-client         = "0.3.0"
 bity-ic-canister-logger         = "0.3.0"
