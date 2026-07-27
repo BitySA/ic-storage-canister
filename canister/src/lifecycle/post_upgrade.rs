@@ -38,6 +38,15 @@ fn post_upgrade(args: Args) {
             state.env.set_version(upgrade_args.version);
             state.env.set_commit_hash(upgrade_args.commit_hash);
 
+            // The capacity ceiling is persisted, so an existing canister keeps the
+            // one it was created with unless it is re-applied here.
+            state
+                .data
+                .storage
+                .set_max_storage_size_bytes(crate::lifecycle::max_storage_size_for(
+                    state.env.is_test_mode(),
+                ));
+
             bity_ic_canister_logger::init_with_logs(state.env.is_test_mode(), logs, traces);
             init_canister(state);
             jobs::start_jobs();

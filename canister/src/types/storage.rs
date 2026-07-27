@@ -78,6 +78,13 @@ impl StorageData {
         bytes as u128
     }
 
+    /// Re-applies the capacity ceiling on upgrade. The value is persisted in
+    /// state, so without this an existing canister would keep whatever ceiling it
+    /// was created with and never pick up a new one.
+    pub fn set_max_storage_size_bytes(&mut self, max_storage_size_wasm32: u128) {
+        self.max_storage_size_wasm32 = max_storage_size_wasm32;
+    }
+
     pub fn get_free_storage_size_bytes(&self) -> u128 {
         let current_size = self.get_storage_size_bytes();
         if current_size >= self.max_storage_size_wasm32 {

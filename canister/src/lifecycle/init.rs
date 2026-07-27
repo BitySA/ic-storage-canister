@@ -18,11 +18,8 @@ fn init(args: Args) {
                 init_args.commit_hash,
             );
 
-            let max_storage_size_wasm32 = if env.is_test_mode() {
-                50 * 1024 * 1024 // 50mb
-            } else {
-                500 * 1024 * 1024 * 1024 // 500gb
-            };
+            let max_storage_size_wasm32 =
+                crate::lifecycle::max_storage_size_for(env.is_test_mode());
 
             let mut data = Data::new(init_args.authorized_principals, max_storage_size_wasm32);
 
