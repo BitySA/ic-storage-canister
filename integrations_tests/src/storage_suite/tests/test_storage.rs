@@ -10,7 +10,7 @@ use icrc_ledger_types::icrc::generic_value::ICRC3Value as Icrc3Value;
 use sha2::{Digest, Sha256};
 
 use crate::storage_suite::setup::setup::TestEnv;
-use crate::utils::{setup_http_client, upload_file};
+use crate::utils::{raw_get, setup_http_client, upload_file};
 use crate::{storage_suite::setup::default_test_setup, utils::tick_n_blocks};
 use bytes::Bytes;
 use http::Request;
@@ -62,18 +62,7 @@ fn test_storage_simple() {
         let location_str = location.to_str().unwrap();
         println!("Redirecting to: {}", location_str);
 
-        let redirected_response = rt.block_on(async {
-            http_gateway
-                .request(HttpGatewayRequestArgs {
-                    canister_id: storage_canister_id.clone(),
-                    canister_request: Request::builder()
-                        .uri(location_str)
-                        .body(Bytes::new())
-                        .unwrap(),
-                })
-                .send()
-                .await
-        });
+        let redirected_response = raw_get(&rt, &http_gateway, storage_canister_id, location_str);
 
         assert_eq!(redirected_response.canister_response.status(), 200);
 
@@ -83,7 +72,7 @@ fn test_storage_simple() {
             ("x-content-type-options", "nosniff"),
             (
                 "content-security-policy",
-                "default-src 'self'; img-src 'self' data:; form-action 'self'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests; block-all-mixed-content",
+                "default-src 'self'; img-src 'self' data:; media-src 'self' blob: data:; form-action 'self'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests; block-all-mixed-content",
             ),
             ("referrer-policy", "no-referrer"),
             (
@@ -93,8 +82,7 @@ fn test_storage_simple() {
             ("cross-origin-embedder-policy", "require-corp"),
             ("cross-origin-opener-policy", "same-origin"),
             ("cache-control", "public, max-age=31536000, immutable"),
-            ("content-type", "image/png"),
-            ("content-length", "6205837")
+            ("content-type", "image/png")
         ];
 
         let response_headers = redirected_response
@@ -735,18 +723,8 @@ fn test_storage_scalability() {
         if let Some(location) = response.canister_response.headers().get("location") {
             let location_str = location.to_str().unwrap();
 
-            let redirected_response = rt.block_on(async {
-                http_gateway
-                    .request(HttpGatewayRequestArgs {
-                        canister_id: storage_canister_id.clone(),
-                        canister_request: Request::builder()
-                            .uri(location_str)
-                            .body(Bytes::new())
-                            .unwrap(),
-                    })
-                    .send()
-                    .await
-            });
+            let redirected_response =
+                raw_get(&rt, &http_gateway, storage_canister_id, location_str);
 
             assert_eq!(redirected_response.canister_response.status(), 200);
 
@@ -775,24 +753,19 @@ fn test_storage_scalability() {
 #[test]
 fn test_storage_heap_management() {
     let mut test_env: TestEnv = default_test_setup();
-    println!("test_env: {:?}", test_env);
 
     let TestEnv {
         ref mut pic,
         storage_canister_id,
         controller,
-        nft_owner1,
-        nft_owner2,
+        ..
     } = test_env;
 
     let file_path = "./src/storage_suite/assets/test.png";
     let mut uploaded_files = Vec::new();
 
-    // Upload multiple files to fill the heap (512MB)
     for i in 0..5 {
         let upload_path = format!("/test_heap_{}.png", i);
-        println!("Attempting to upload file {} at path: {}", i, upload_path);
-
         let buffer = upload_file(
             pic,
             controller,
@@ -800,42 +773,30 @@ fn test_storage_heap_management() {
             file_path,
             &upload_path,
         )
-        .expect(&format!("Upload {} failed", i));
-
-        uploaded_files.push((upload_path.clone(), buffer));
-        println!("Successfully uploaded file {}", i);
+        .unwrap_or_else(|e| panic!("Upload {} failed: {}", i, e));
+        uploaded_files.push((upload_path, buffer));
     }
 
     let (rt, http_gateway) = setup_http_client(pic);
 
-    // First request for each file should work and cache the file
-    for (i, (upload_path, original_buffer)) in uploaded_files.iter().enumerate() {
-        println!("First request for file {} at path: {}", i, upload_path);
+    // Files are no longer served from the certified asset router, so there is no
+    // heap cache to cycle and no eviction order left to observe: the certified
+    // domain always redirects to raw, and raw streams straight out of stable
+    // memory. What has to hold is that all five 6 MB files stay retrievable in
+    // any order without the canister running out of heap.
+    let forward: Vec<usize> = (0..uploaded_files.len()).collect();
+    let reverse: Vec<usize> = (0..uploaded_files.len()).rev().collect();
 
-        let response = rt.block_on(async {
-            http_gateway
-                .request(HttpGatewayRequestArgs {
-                    canister_id: storage_canister_id.clone(),
-                    canister_request: Request::builder()
-                        .uri(upload_path.as_str())
-                        .body(Bytes::new())
-                        .unwrap(),
-                })
-                .send()
-                .await
-        });
+    for pass in [forward.clone(), reverse, forward] {
+        for i in pass {
+            let (upload_path, original_buffer) = &uploaded_files[i];
 
-        assert_eq!(response.canister_response.status(), 307);
-
-        if let Some(location) = response.canister_response.headers().get("location") {
-            let location_str = location.to_str().unwrap();
-
-            let redirected_response = rt.block_on(async {
+            let response = rt.block_on(async {
                 http_gateway
                     .request(HttpGatewayRequestArgs {
-                        canister_id: storage_canister_id.clone(),
+                        canister_id: storage_canister_id,
                         canister_request: Request::builder()
-                            .uri(location_str)
+                            .uri(upload_path.as_str())
                             .body(Bytes::new())
                             .unwrap(),
                     })
@@ -843,185 +804,40 @@ fn test_storage_heap_management() {
                     .await
             });
 
-            assert_eq!(redirected_response.canister_response.status(), 200);
+            assert_eq!(
+                response.canister_response.status(),
+                307,
+                "certified domain must redirect file {} to raw",
+                i
+            );
 
-            rt.block_on(async {
-                let body = redirected_response
+            let location = response
+                .canister_response
+                .headers()
+                .get("location")
+                .unwrap_or_else(|| panic!("no redirect location for {}", upload_path))
+                .to_str()
+                .unwrap()
+                .to_string();
+
+            let redirected = raw_get(&rt, &http_gateway, storage_canister_id, &location);
+            assert_eq!(redirected.canister_response.status(), 200);
+
+            let body = rt.block_on(async {
+                redirected
                     .canister_response
                     .into_body()
                     .collect()
                     .await
                     .unwrap()
                     .to_bytes()
-                    .to_vec();
-
-                assert_eq!(
-                    body, *original_buffer,
-                    "File content mismatch for {}",
-                    upload_path
-                );
+                    .to_vec()
             });
-        } else {
-            panic!("No redirect location found for {}", upload_path);
-        }
-    }
-
-    // Request files in reverse order to verify FIFO cache behavior
-    // The first files should be uncached to make room for the later ones
-    for (i, (upload_path, original_buffer)) in uploaded_files.iter().enumerate().rev() {
-        println!("Reverse request for file {} at path: {}", i, upload_path);
-
-        let response = rt.block_on(async {
-            http_gateway
-                .request(HttpGatewayRequestArgs {
-                    canister_id: storage_canister_id.clone(),
-                    canister_request: Request::builder()
-                        .uri(upload_path.as_str())
-                        .body(Bytes::new())
-                        .unwrap(),
-                })
-                .send()
-                .await
-        });
-
-        // Files 0 and 1 should be uncached (307), while files 2, 3, and 4 should be cached (200)
-        let expected_status = if i <= 1 { 307 } else { 200 };
-        assert_eq!(
-            response.canister_response.status(),
-            expected_status,
-            "Unexpected status for file {}",
-            i
-        );
-
-        if response.canister_response.status() == 307 {
-            if let Some(location) = response.canister_response.headers().get("location") {
-                let location_str = location.to_str().unwrap();
-
-                let redirected_response = rt.block_on(async {
-                    http_gateway
-                        .request(HttpGatewayRequestArgs {
-                            canister_id: storage_canister_id.clone(),
-                            canister_request: Request::builder()
-                                .uri(location_str)
-                                .body(Bytes::new())
-                                .unwrap(),
-                        })
-                        .send()
-                        .await
-                });
-
-                assert_eq!(redirected_response.canister_response.status(), 200);
-
-                rt.block_on(async {
-                    let body = redirected_response
-                        .canister_response
-                        .into_body()
-                        .collect()
-                        .await
-                        .unwrap()
-                        .to_bytes()
-                        .to_vec();
-
-                    assert_eq!(
-                        body, *original_buffer,
-                        "File content mismatch for {}",
-                        upload_path
-                    );
-                });
-            } else {
-                panic!("No redirect location found for {}", upload_path);
-            }
-        } else {
-            // For cached files (status 200), verify content directly
-            rt.block_on(async {
-                let body = response
-                    .canister_response
-                    .into_body()
-                    .collect()
-                    .await
-                    .unwrap()
-                    .to_bytes()
-                    .to_vec();
-
-                assert_eq!(
-                    body, *original_buffer,
-                    "File content mismatch for {}",
-                    upload_path
-                );
-            });
-        }
-    }
-
-    // Verify that we can still access all files even after cache cycling
-    for (i, (upload_path, original_buffer)) in uploaded_files.iter().enumerate() {
-        println!("Final verification for file {} at path: {}", i, upload_path);
-
-        let response = rt.block_on(async {
-            http_gateway
-                .request(HttpGatewayRequestArgs {
-                    canister_id: storage_canister_id.clone(),
-                    canister_request: Request::builder()
-                        .uri(upload_path.as_str())
-                        .body(Bytes::new())
-                        .unwrap(),
-                })
-                .send()
-                .await
-        });
-
-        if let Some(location) = response.canister_response.headers().get("location") {
-            let location_str = location.to_str().unwrap();
-
-            let redirected_response = rt.block_on(async {
-                http_gateway
-                    .request(HttpGatewayRequestArgs {
-                        canister_id: storage_canister_id.clone(),
-                        canister_request: Request::builder()
-                            .uri(location_str)
-                            .body(Bytes::new())
-                            .unwrap(),
-                    })
-                    .send()
-                    .await
-            });
-
-            assert_eq!(redirected_response.canister_response.status(), 200);
-
-            rt.block_on(async {
-                let body = redirected_response
-                    .canister_response
-                    .into_body()
-                    .collect()
-                    .await
-                    .unwrap()
-                    .to_bytes()
-                    .to_vec();
-
-                assert_eq!(
-                    body, *original_buffer,
-                    "File content mismatch for {}",
-                    upload_path
-                );
-            });
-        } else {
-            assert_eq!(response.canister_response.status(), 200);
-
-            rt.block_on(async {
-                let body = response
-                    .canister_response
-                    .into_body()
-                    .collect()
-                    .await
-                    .unwrap()
-                    .to_bytes()
-                    .to_vec();
-
-                assert_eq!(
-                    body, *original_buffer,
-                    "File content mismatch for {}",
-                    upload_path
-                );
-            });
+            assert_eq!(
+                &body, original_buffer,
+                "content mismatch for {}",
+                upload_path
+            );
         }
     }
 }

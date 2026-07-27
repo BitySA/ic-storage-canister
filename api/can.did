@@ -75,8 +75,8 @@ type UpgradeArgs = record { version : BuildVersion; commit_hash : text };
 service : (Args_5) -> {
   cancel_upload : (Args) -> (Result);
   finalize_upload : (Args) -> (Result_1);
-  get_memory : (null) -> (nat64) query;
   get_storage_size : (null) -> (nat) query;
+  get_stored_files_size_bytes : (null) -> (nat64) query;
   init_reupload : (Args_1) -> (Result_2);
   init_upload : (Args_2) -> (Result_3);
   remove_file : (Args_3) -> (Result_4);

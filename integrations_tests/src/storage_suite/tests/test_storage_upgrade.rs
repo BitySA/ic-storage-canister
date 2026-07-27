@@ -11,6 +11,7 @@ use bity_ic_storage_canister_api::store_chunk;
 use sha2::{Digest, Sha256};
 
 use crate::storage_suite::setup::setup::TestEnv;
+use crate::utils::raw_get;
 use crate::{storage_suite::setup::default_test_setup, utils::tick_n_blocks};
 use bytes::Bytes;
 use http::Request;
@@ -187,18 +188,8 @@ fn test_storage_after_update_simple() {
 
             println!("location_str: {:?}", location_str);
 
-            let redirected_response = rt.block_on(async {
-                http_gateway
-                    .request(HttpGatewayRequestArgs {
-                        canister_id: storage_canister_id.clone(),
-                        canister_request: Request::builder()
-                            .uri(location_str)
-                            .body(Bytes::new())
-                            .unwrap(),
-                    })
-                    .send()
-                    .await
-            });
+            let redirected_response =
+                raw_get(&rt, &http_gateway, storage_canister_id, location_str);
 
             let redirected_response_headers = redirected_response
                 .canister_response
@@ -224,7 +215,7 @@ fn test_storage_after_update_simple() {
                 ("x-content-type-options", "nosniff"),
                 (
                     "content-security-policy",
-                    "default-src 'self'; img-src 'self' data:; form-action 'self'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests; block-all-mixed-content",
+                    "default-src 'self'; img-src 'self' data:; media-src 'self' blob: data:; form-action 'self'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests; block-all-mixed-content",
                 ),
                 ("referrer-policy", "no-referrer"),
                 (
@@ -234,8 +225,7 @@ fn test_storage_after_update_simple() {
                 ("cross-origin-embedder-policy", "require-corp"),
                 ("cross-origin-opener-policy", "same-origin"),
                 ("cache-control", "public, max-age=31536000, immutable"),
-                ("content-type", "image/png"),
-                ("content-length", "6205837")
+                ("content-type", "image/png")
             ];
 
             println!(

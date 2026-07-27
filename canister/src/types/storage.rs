@@ -427,6 +427,37 @@ impl StorageData {
         Some((data, get_content_type_for_path(key)))
     }
 
+    /// Returns at most `len` bytes of a finalized file starting at `offset`,
+    /// along with the file's true total length and content type.
+    ///
+    /// The total is taken from the bytes themselves rather than from the
+    /// metadata so a caller can never advertise a length it cannot deliver.
+    /// The returned slice is empty once `offset` reaches the end, which is how
+    /// the streaming callback detects the end of a file.
+    pub fn get_file_slice(
+        &self,
+        path: &str,
+        offset: u64,
+        len: usize,
+    ) -> Option<(Vec<u8>, u64, &'static str)> {
+        let key = path.trim_start_matches('/');
+        let metadata = self.storage_raw_internal_metadata.get(key)?;
+        if metadata.state != UploadState::Finalized {
+            return None;
+        }
+        let data = self.storage_raw.get(&key.to_string())?;
+        let total = data.len() as u64;
+        let start = usize::try_from(offset)
+            .unwrap_or(usize::MAX)
+            .min(data.len());
+        let end = start.saturating_add(len).min(data.len());
+        Some((
+            data[start..end].to_vec(),
+            total,
+            get_content_type_for_path(key),
+        ))
+    }
+
     pub fn get_all_files(&self) -> Vec<(InternalRawStorageMetadata, Vec<u8>)> {
         self.storage_raw_internal_metadata
             .iter()
