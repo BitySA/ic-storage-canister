@@ -38,7 +38,15 @@ fn default_init_timestamp() -> u64 {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InternalRawStorageMetadata {
     pub file_path: String,
-    pub file_hash: String,
+    /// Expected SHA-256 of the file, hex-encoded, or `None` when the upload
+    /// declared no hash and finalize must not compare one.
+    ///
+    /// No migration is needed for this field becoming optional: state is
+    /// persisted by `bity_ic_serializer`, which uses `rmp_serde` with
+    /// `.with_struct_map()`, so each field is written as a self-describing
+    /// MessagePack map entry keyed by name. A string written by an earlier
+    /// version is read back through `visit_some` as `Some(hash)`.
+    pub file_hash: Option<String>,
     pub file_size: u64,
     pub received_size: u64,
     pub chunks_size: u64,
@@ -215,7 +223,10 @@ impl StorageData {
             reupload_key,
             InternalRawStorageMetadata {
                 file_path: path,
-                file_hash: data.file_hash,
+                // The reupload API keeps a mandatory hash: a reupload replaces
+                // bytes already being served, so there is always a plaintext
+                // digest to check against.
+                file_hash: Some(data.file_hash),
                 file_size: data.file_size,
                 received_size: 0,
                 chunks_size: chunk_size,
@@ -362,12 +373,14 @@ impl StorageData {
             return Err(finalize_upload::FinalizeUploadError::FileSizeMismatch);
         }
 
-        let mut hasher = Sha256::new();
-        hasher.update(&file_data);
-        let calculated_hash = hex::encode(hasher.finalize());
-
-        if calculated_hash != metadata.file_hash {
-            return Err(finalize_upload::FinalizeUploadError::FileHashMismatch);
+        // An upload that declared no hash finalizes on size and completeness
+        // alone; the caller vouches for integrity by other means.
+        if let Some(expected) = metadata.file_hash.as_deref() {
+            let mut hasher = Sha256::new();
+            hasher.update(&file_data);
+            if hex::encode(hasher.finalize()) != expected {
+                return Err(finalize_upload::FinalizeUploadError::FileHashMismatch);
+            }
         }
 
         if is_reupload {

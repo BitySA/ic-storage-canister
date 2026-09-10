@@ -19,13 +19,13 @@
 //! via a `STORAGE_WASM_V<...>` lazy_static in `crate::wasms`, and add a new
 //! `#[test]` below that calls `assert_upgrade_preserves_files(...)`.
 
-use crate::client::storage::{finalize_upload, http_request, init_upload, store_chunk};
+use crate::client::storage::{finalize_upload, http_request, store_chunk};
 use crate::storage_suite::setup::historical_test_setup;
 use crate::storage_suite::setup::setup::TestEnv;
 use crate::storage_suite::setup::setup_storage::upgrade_storage_canister;
+use crate::utils::{init_upload_legacy, LegacyInitUploadArgs};
 use crate::wasms::{STORAGE_WASM_V0_2_0, STORAGE_WASM_V0_2_1};
 use bity_ic_storage_canister_api::finalize_upload;
-use bity_ic_storage_canister_api::init_upload;
 use bity_ic_storage_canister_api::lifecycle::Args;
 use bity_ic_storage_canister_api::post_upgrade::UpgradeArgs;
 use bity_ic_storage_canister_api::store_chunk;
@@ -75,16 +75,19 @@ fn assert_upgrade_preserves_files(historical_wasm: CanisterWasm, label: &str) {
 
     let target_path = "/test.png".to_string();
 
-    init_upload(
+    // The historical WASM declares `file_hash` as a mandatory `text` and cannot
+    // decode the current `opt text` record, so the upload must go through the
+    // old shape for these tests to keep exercising the historical API.
+    init_upload_legacy(
         pic,
         controller,
         storage_canister_id,
-        &(init_upload::Args {
+        LegacyInitUploadArgs {
             file_path: target_path.clone(),
             file_hash: file_hash.clone(),
             file_size,
             chunk_size: None,
-        }),
+        },
     )
     .expect("init_upload on historical wasm failed");
 

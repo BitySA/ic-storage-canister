@@ -140,7 +140,7 @@ fn test_duplicate_upload() {
         storage_canister_id,
         &(init_upload::Args {
             file_path: upload_path.to_string(),
-            file_hash: "dummy_hash".to_string(),
+            file_hash: Some("dummy_hash".to_string()),
             file_size: 1024,
             chunk_size: None,
         }),
@@ -186,7 +186,7 @@ fn test_duplicate_chunk_upload() {
         storage_canister_id,
         &(init_upload::Args {
             file_path: "/test.png".to_string(),
-            file_hash: format!("{:x}", file_hash),
+            file_hash: Some(format!("{:x}", file_hash)),
             file_size,
             chunk_size: None,
         }),
@@ -279,7 +279,7 @@ fn test_finalize_upload_missing_chunk() {
         storage_canister_id,
         &(init_upload::Args {
             file_path: "/test.png".to_string(),
-            file_hash: format!("{:x}", file_hash),
+            file_hash: Some(format!("{:x}", file_hash)),
             file_size,
             chunk_size: None,
         }),
@@ -366,7 +366,7 @@ fn test_upload_with_incorrect_chunk() {
         storage_canister_id,
         &(init_upload::Args {
             file_path: "/test.png".to_string(),
-            file_hash: format!("{:x}", file_hash),
+            file_hash: Some(format!("{:x}", file_hash)),
             file_size,
             chunk_size: None,
         }),
@@ -465,7 +465,7 @@ fn test_cancel_upload() {
         storage_canister_id,
         &(init_upload::Args {
             file_path: "/test_cancel.png".to_string(),
-            file_hash: format!("{:x}", file_hash),
+            file_hash: Some(format!("{:x}", file_hash)),
             file_size,
             chunk_size: None,
         }),
@@ -572,7 +572,7 @@ fn test_non_governance_principal_rejection() {
                     storage_canister_id,
                     &(init_upload::Args {
                         file_path: file_path.clone(),
-                        file_hash: file_hash.clone(),
+                        file_hash: Some(file_hash.clone()),
                         file_size,
                         chunk_size: None,
                     }),

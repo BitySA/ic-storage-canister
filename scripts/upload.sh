@@ -39,7 +39,7 @@ echo "[1/3] Initializing upload..."
 INIT_RES=$(dfx canister --network "$NETWORK" call "$CANISTER_ID" init_upload "(record {
     file_path = \"$FILE_NAME\";
     file_size = $FILE_SIZE : nat64;
-    file_hash = \"$FILE_HASH\";
+    file_hash = opt \"$FILE_HASH\";
     chunk_size = null;
 })")
 

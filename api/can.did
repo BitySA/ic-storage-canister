@@ -6,7 +6,7 @@ type Args_1 = record {
   chunk_size : opt nat64;
 };
 type Args_2 = record {
-  file_hash : text;
+  file_hash : opt text;
   file_path : text;
   file_size : nat64;
   chunk_size : opt nat64;

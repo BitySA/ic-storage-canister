@@ -32,7 +32,7 @@ fn upload_custom_file(
         storage_canister_id,
         &(init_upload::Args {
             file_path: upload_path.to_string(),
-            file_hash,
+            file_hash: Some(file_hash),
             file_size,
             chunk_size: None,
         }),

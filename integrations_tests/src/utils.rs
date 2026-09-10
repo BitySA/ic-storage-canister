@@ -19,6 +19,38 @@ use std::path::Path;
 use std::str::FromStr;
 use url::Url;
 
+/// `init_upload::Args` as it was before `file_hash` became optional, with a
+/// mandatory `file_hash`.
+///
+/// Candid promotes a `text` argument to an `opt text` parameter but never the
+/// reverse. That asymmetry makes this shape matter twice: it is what an already
+/// deployed client keeps sending to an upgraded canister (which must keep
+/// working), and it is the only shape a historical canister can decode.
+#[derive(candid::CandidType)]
+pub struct LegacyInitUploadArgs {
+    pub file_path: String,
+    pub file_hash: String,
+    pub file_size: u64,
+    pub chunk_size: Option<u64>,
+}
+
+/// Calls `init_upload` with the pre-0.7.0 record shape, bypassing the current
+/// `Args` type.
+pub fn init_upload_legacy(
+    pic: &mut PocketIc,
+    sender: Principal,
+    canister_id: Principal,
+    args: LegacyInitUploadArgs,
+) -> init_upload::Response {
+    crate::client::pocket::execute_update_encoded_args(
+        pic,
+        sender,
+        canister_id,
+        "init_upload",
+        candid::encode_one(args).unwrap(),
+    )
+}
+
 pub fn random_principal() -> Principal {
     let bytes: [u8; 29] = rng().random();
     Principal::from_slice(&bytes)
@@ -56,7 +88,7 @@ pub fn upload_file(
         storage_canister_id,
         &(init_upload::Args {
             file_path: upload_path.to_string(),
-            file_hash: format!("{:x}", file_hash),
+            file_hash: Some(format!("{:x}", file_hash)),
             file_size,
             chunk_size: None,
         }),

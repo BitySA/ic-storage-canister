@@ -64,7 +64,7 @@ fn abandoned_upload_init_timestamp_survives_upgrade() {
         storage_canister_id,
         &(init_upload::Args {
             file_path: file_path.clone(),
-            file_hash: "00".repeat(32),
+            file_hash: Some("00".repeat(32)),
             file_size,
             chunk_size: None,
         }),
@@ -114,7 +114,7 @@ fn abandoned_upload_init_timestamp_survives_upgrade() {
         storage_canister_id,
         &(init_upload::Args {
             file_path: file_path.clone(),
-            file_hash: "00".repeat(32),
+            file_hash: Some("00".repeat(32)),
             file_size,
             chunk_size: None,
         }),
@@ -140,7 +140,7 @@ fn abandoned_upload_init_timestamp_survives_upgrade() {
         storage_canister_id,
         &(init_upload::Args {
             file_path: file_path.clone(),
-            file_hash: "00".repeat(32),
+            file_hash: Some("00".repeat(32)),
             file_size,
             chunk_size: None,
         }),

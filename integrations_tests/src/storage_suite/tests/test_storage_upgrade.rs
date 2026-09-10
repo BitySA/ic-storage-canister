@@ -56,7 +56,7 @@ fn test_storage_after_update_simple() {
         storage_canister_id,
         &(init_upload::Args {
             file_path: "/test.png".to_string(),
-            file_hash: format!("{:x}", file_hash),
+            file_hash: Some(format!("{:x}", file_hash)),
             file_size,
             chunk_size: None,
         }),
