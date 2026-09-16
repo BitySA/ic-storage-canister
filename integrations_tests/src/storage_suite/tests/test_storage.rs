@@ -1,4 +1,6 @@
-use crate::client::storage::{cancel_upload, finalize_upload, init_upload, store_chunk};
+use crate::client::storage::{
+    cancel_upload, finalize_upload, get_storage_size, init_upload, store_chunk,
+};
 use candid::Nat;
 
 use bity_ic_storage_canister_api::cancel_upload;
@@ -21,6 +23,10 @@ use std::fs::File;
 use std::io::Read;
 use std::panic::AssertUnwindSafe;
 use std::path::Path;
+
+/// Test mode storage ceiling. Keep in sync with `max_storage_size_for` in
+/// `canister/src/lifecycle/mod.rs`.
+const TEST_MODE_MAX_STORAGE_BYTES: u128 = 500 * 1024 * 1024;
 
 #[test]
 fn test_storage_simple() {
@@ -654,7 +660,7 @@ fn test_storage_scalability() {
     let file_path = "./src/storage_suite/assets/test.png";
     let mut uploaded_buffers = Vec::new();
 
-    // Upload first two files - should succeed
+    // Upload several real files. Together they stay far below the test mode ceiling.
     for i in 0..7 {
         let upload_path = format!("/test_scalability_{}.png", i);
         println!("Attempting to upload file {} at path: {}", i, upload_path);
@@ -671,34 +677,68 @@ fn test_storage_scalability() {
         uploaded_buffers.push((upload_path.clone(), buffer));
     }
 
-    // Verify we have exactly 2 successful uploads
     assert_eq!(
         uploaded_buffers.len(),
         7,
-        "Expected exactly 10 successful uploads"
+        "Expected exactly 7 successful uploads"
     );
 
-    // Try to upload the third file - should fail due to 15MB limit
-    let upload_path = "/test_scalability_7.png";
-    println!("Attempting to upload third file at path: {}", upload_path);
+    // Filling the whole ceiling with real uploads would make this test very slow.
+    // init_upload compares the declared file size with the free space before any
+    // bytes are sent, so declare sizes right at the edge of the free space instead.
+    let used_bytes = get_storage_size(pic, controller, storage_canister_id, &());
+    assert!(
+        used_bytes < TEST_MODE_MAX_STORAGE_BYTES,
+        "Expected the uploads to fit under the test mode ceiling, stable memory is {used_bytes} bytes"
+    );
+    let free_bytes = (TEST_MODE_MAX_STORAGE_BYTES - used_bytes) as u64;
 
-    let result = upload_file(
+    let too_big = init_upload(
         pic,
         controller,
         storage_canister_id,
-        file_path,
-        &upload_path,
+        &(init_upload::Args {
+            file_path: "/test_scalability_too_big.png".to_string(),
+            file_hash: None,
+            file_size: free_bytes + 1,
+            chunk_size: None,
+        }),
+    );
+    assert!(
+        matches!(
+            too_big,
+            Err(init_upload::InitUploadError::NotEnoughStorage)
+        ),
+        "Expected a file one byte larger than the free space to fail with NotEnoughStorage, got {too_big:?}"
     );
 
-    match result {
-        Ok(_) => panic!("Expected third upload to fail due to storage limit"),
-        Err(e) => {
-            assert_eq!(e, format!("init_upload error: {:?}", bity_ic_storage_canister_api::updates::init_upload::InitUploadError::NotEnoughStorage));
-            println!("Third upload failed as expected with: {:?}", e);
-        }
-    }
+    let exact_fit = init_upload(
+        pic,
+        controller,
+        storage_canister_id,
+        &(init_upload::Args {
+            file_path: "/test_scalability_exact_fit.png".to_string(),
+            file_hash: None,
+            file_size: free_bytes,
+            chunk_size: None,
+        }),
+    );
+    assert!(
+        exact_fit.is_ok(),
+        "Expected a file exactly as large as the free space to be accepted, got {exact_fit:?}"
+    );
 
-    // Verify that the first two uploaded files are accessible
+    cancel_upload(
+        pic,
+        controller,
+        storage_canister_id,
+        &(cancel_upload::Args {
+            file_path: "/test_scalability_exact_fit.png".to_string(),
+        }),
+    )
+    .expect("Cancelling the exact fit upload failed");
+
+    // Verify that the uploaded files are still served
     let (rt, http_gateway) = setup_http_client(pic);
 
     // Verify each uploaded file

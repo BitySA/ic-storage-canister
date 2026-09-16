@@ -25,10 +25,11 @@ $[[ inputs.src-folder ]] integration-test build:
       needs: ["integration tests trigger"]
   extends: .rust template
   script:
+    # build.sh also regenerates api/can.did, so generate_did.sh is not needed here.
     - scripts/build.sh
-    - scripts/generate_did.sh
   artifacts:
     name: "$[[ inputs.src-folder ]]-${CI_COMMIT_SHORT_SHA}-wasm-INT_TEST_BUILD"
     paths:
-      - canister/target/wasm32-unknown-unknown/release
+      # The integration tests read the canister from wasm/storage_canister.wasm.gz.
+      - wasm
     expire_in: 1 day

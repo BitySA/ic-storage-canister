@@ -86,4 +86,4 @@ integration tests:
     - mv ./pocket-ic ./integrations_tests/pocket-ic
     - ulimit -n 809600
     - ulimit -f 8096000
-    - cargo test -p integrations_tests
+    - cargo test -p integration_tests -- --test-threads=1

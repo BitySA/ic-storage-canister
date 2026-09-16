@@ -1,17 +1,31 @@
 #!/bin/bash
 
-# http://uzt4z-lp777-77774-qaabq-cai.raw.localhost:4943/logs
+# Upload one file to the storage canister on the local replica.
+# The file is stored under its file name, for example logo.svg.
+#
+# Usage: scripts/upload.sh <local_file_path>
 
 set -euo pipefail
 
-CANISTER_ID=$(dfx canister id storage --network local)
 NETWORK="local"
 CHUNK_SIZE=1048576  # 1MiB — must match DEFAULT_CHUNK_SIZE in canister/src/types/storage.rs
+
+# dfx prints replies across several lines, so squash whitespace before matching on them.
+flat() { tr -s '[:space:]' ' ' <<< "$1"; }
 
 if [ "$#" -ne 1 ]; then
     echo "Usage: $0 <local_file_path>"
     exit 1
 fi
+
+if ! CANISTER_ID=$(dfx canister id storage --network "$NETWORK" 2> /dev/null); then
+    echo "Error: the storage canister is not deployed on the local replica."
+    echo "Deploy it with: ./scripts/deploy/local/deploy_storage.sh"
+    exit 1
+fi
+
+ARG_FILE=""
+trap 'rm -f "$ARG_FILE"' EXIT
 
 FILE_PATH="$1"
 FILE_NAME=$(basename "$FILE_PATH")
@@ -43,7 +57,7 @@ INIT_RES=$(dfx canister --network "$NETWORK" call "$CANISTER_ID" init_upload "(r
     chunk_size = null;
 })")
 
-if [[ "$INIT_RES" == *"variant { Err"* ]]; then
+if [[ "$(flat "$INIT_RES")" == *"variant { Err"* ]]; then
     echo "Error during init_upload: $INIT_RES"
     exit 1
 fi
@@ -59,7 +73,7 @@ for (( i=0; i<TOTAL_CHUNKS; i++ )); do
     echo "  Chunk $i / $((TOTAL_CHUNKS - 1)) (offset $OFFSET)..."
 
     ARG_FILE=$(mktemp /tmp/chunk_XXXXXX)
-    HEX_DATA=$(dd if="$FILE_PATH" bs=1 skip="$OFFSET" count="$CHUNK_SIZE" 2>/dev/null \
+    HEX_DATA=$(dd if="$FILE_PATH" bs="$CHUNK_SIZE" skip="$i" count=1 2>/dev/null \
         | hexdump -ve '1/1 "\\%02x"')
     printf '(record { file_path = "%s"; chunk_id = %d : nat; chunk_data = blob "%s"; })' \
         "$FILE_NAME" "$i" "$HEX_DATA" > "$ARG_FILE"
@@ -68,7 +82,7 @@ for (( i=0; i<TOTAL_CHUNKS; i++ )); do
         --argument-file "$ARG_FILE")
     rm -f "$ARG_FILE"
 
-    if [[ "$CHUNK_RES" == *"variant { Err"* ]]; then
+    if [[ "$(flat "$CHUNK_RES")" == *"variant { Err"* ]]; then
         echo "Error at chunk $i: $CHUNK_RES"
         echo "Cancelling upload..."
         dfx canister --network "$NETWORK" call "$CANISTER_ID" cancel_upload "(record {
@@ -85,10 +99,14 @@ FINALIZE_RES=$(dfx canister --network "$NETWORK" call "$CANISTER_ID" finalize_up
     file_path = \"$FILE_NAME\";
 })")
 
-if [[ "$FINALIZE_RES" == *"variant { Ok"* ]]; then
+if [[ "$(flat "$FINALIZE_RES")" == *"variant { Ok"* ]]; then
     URL=$(echo "$FINALIZE_RES" | sed -n 's/.*url = "\([^"]*\)".*/\1/p')
+    PORT=$(dfx info webserver-port)
     echo ""
     echo "Upload complete! File available at:"
+    echo "http://$CANISTER_ID.raw.localhost:$PORT/$FILE_NAME"
+    echo ""
+    echo "The canister returned this mainnet URL, which does not work locally:"
     echo "$URL"
 else
     echo "Error during finalize_upload: $FINALIZE_RES"
